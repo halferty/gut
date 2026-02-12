@@ -2609,6 +2609,9 @@ public:
     RepeatBehavior repeatBehavior() const { return m_repeatBehavior; }
     void setRepeatBehavior(RepeatBehavior behavior) { m_repeatBehavior = behavior; }
     
+    void setEasingFunction(EasingFunction fn) { m_easingFunction = std::move(fn); }
+    const EasingFunction& easingFunction() const { return m_easingFunction; }
+    
     // State
     AnimationState state() const { return m_state; }
     f32 currentTime() const { return m_currentTime; }
@@ -2634,6 +2637,7 @@ protected:
     
     AnimationState m_state = AnimationState::Stopped;
     RepeatBehavior m_repeatBehavior;
+    EasingFunction m_easingFunction;
     f32 m_currentTime = 0.0f;
     f32 m_totalElapsed = 0.0f;
     i32 m_currentIteration = 0;
@@ -11703,6 +11707,11 @@ void Animation::update(f32 deltaMs) {
         t = 1.0f - t;
     }
     
+    // Apply easing function if set
+    if (m_easingFunction) {
+        t = m_easingFunction(t);
+    }
+    
     applyValue(t);
     
     m_totalElapsed += deltaMs;
@@ -14679,6 +14688,10 @@ void Context::update(f32 deltaTime) {
     
     // Update global animation timeline
     Timeline::global()->update(deltaTime);
+    
+    // Animations may have changed layout properties (e.g., width),
+    // so mark layout dirty to re-measure on next render
+    m_layoutDirty = true;
 }
 
 void Context::layout() {
@@ -14706,31 +14719,24 @@ void Context::render(f32 width, f32 height, f32 devicePixelRatio) {
     
     if (!m_root) return;
     
-    // Begin frame
-    m_backend->beginFrame(
-        static_cast<u32>(width * devicePixelRatio),
-        static_cast<u32>(height * devicePixelRatio),
-        devicePixelRatio
-    );
+    // Begin frame on render context (which will call backend->beginFrame)
+    m_renderContext->beginFrame({width, height}, devicePixelRatio);
     
     // Render the element tree
     renderElement(m_root.get());
     
-    // End frame
-    m_backend->endFrame();
+    // End frame on render context (which will flush and call backend->endFrame)
+    m_renderContext->endFrame();
 }
 
 void Context::renderElement(Element* element) {
     if (!element) return;
     if (element->visibility() != Visibility::Visible) return;
     
-    // Render this element
+    // Render this element (Panel::onRender handles children via renderChildren,
+    // so we do NOT iterate children here — that would double-render them
+    // outside the parent's opacity/clip scope)
     element->render(*m_renderContext);
-    
-    // Render children
-    for (usize i = 0; i < element->childCount(); ++i) {
-        renderElement(element->childAt(i));
-    }
 }
 
 void Context::processMouseMove(f32 x, f32 y) {
