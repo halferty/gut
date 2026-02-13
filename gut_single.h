@@ -1943,6 +1943,11 @@ public:
     void drawLine(Point2f p1, Point2f p2, const Pen& pen);
     
     /**
+     * @brief Fill a triangle.
+     */
+    void fillTriangle(Point2f p1, Point2f p2, Point2f p3, Color color);
+
+    /**
      * @brief Fill a path.
      */
     void fillPath(const Path& path, Color color);
@@ -3846,6 +3851,7 @@ public:
     // -------------------------------------------------------------------------
     
     GUT_PROPERTY(bool, focusable, false)
+    GUT_PROPERTY(i32, tabIndex, 0)
     GUT_PROPERTY(bool, isHitTestVisible, true)
     GUT_PROPERTY_READONLY(bool, isFocused, false)
     GUT_PROPERTY_READONLY(bool, isHovered, false)
@@ -4386,6 +4392,7 @@ public:
     GUT_PROPERTY(Color, pressedBackground, Color::fromHex(0xC0C0C0))
     GUT_PROPERTY(Color, disabledBackground, Color::fromHex(0xF0F0F0))
     GUT_PROPERTY(Color, borderColor, Color::fromHex(0xA0A0A0))
+    GUT_PROPERTY(Color, focusBorderColor, Color::fromRgba8(100, 180, 255, 255))
     GUT_PROPERTY(f32, borderWidth, 1.0f)
     GUT_PROPERTY(f32, cornerRadius, 4.0f)
     
@@ -4576,17 +4583,26 @@ public:
     GUT_PROPERTY(Color, scrollBarBackground, Color::fromHex(0xF0F0F0))
     GUT_PROPERTY(Color, scrollBarThumb, Color::fromHex(0xC0C0C0))
     GUT_PROPERTY(Color, scrollBarThumbHover, Color::fromHex(0xA0A0A0))
+    GUT_PROPERTY(Color, scrollBarThumbDrag, Color::fromHex(0x808080))
+    GUT_PROPERTY(f32, scrollArrowSize, 14.0f)
 
 protected:
     Size2f measureOverride(Size2f availableSize) override;
     Size2f arrangeOverride(Size2f finalSize) override;
     void onRender(RenderContext& ctx) override;
     bool onMouseEvent(const MouseEvent& event) override;
+    void onMouseLeave() override;
 
 private:
     void updateScrollBars();
     bool needsHorizontalScrollBar() const;
     bool needsVerticalScrollBar() const;
+    
+    // Thumb geometry helpers
+    Rectf verticalThumbRect() const;
+    Rectf verticalTrackRect() const;
+    Rectf verticalUpArrowRect() const;
+    Rectf verticalDownArrowRect() const;
     
     f32 m_scrollableWidth{0.0f};
     f32 m_scrollableHeight{0.0f};
@@ -4598,6 +4614,139 @@ private:
     bool m_draggingHorizontal{false};
     bool m_draggingVertical{false};
     f32 m_dragStartOffset{0.0f};
+    f32 m_dragStartMouse{0.0f};
+    
+    bool m_upArrowHovered{false};
+    bool m_downArrowHovered{false};
+    bool m_upArrowPressed{false};
+    bool m_downArrowPressed{false};
+    bool m_pendingScrollToBottom{false};
+};
+
+} // namespace gut
+
+
+// --- gut/elements/TextBox.h ---
+
+
+#include <string>
+#include <algorithm>
+
+namespace gut {
+
+/**
+ * @brief Single-line text input control.
+ *
+ * Supports typing, caret movement, text selection, clipboard (Cmd+C/V/X),
+ * Home/End, Ctrl+Arrows for word navigation, and a blinking caret.
+ */
+class GUT_API TextBox : public Element {
+    GUT_OBJECT(TextBox, Element)
+
+public:
+    TextBox();
+    explicit TextBox(String initialText);
+    ~TextBox() override = default;
+
+    // -------------------------------------------------------------------------
+    // Content
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(String, text, "")
+    GUT_PROPERTY(String, placeholder, "")
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(Color, background, Color::white())
+    GUT_PROPERTY(Color, foreground, Color::black())
+    GUT_PROPERTY(Color, placeholderColor, Color::fromRgba8(160, 160, 160))
+    GUT_PROPERTY(Color, borderColor, Color::fromHex(0xA0A0A0))
+    GUT_PROPERTY(Color, focusBorderColor, Color::fromHex(0x0078D4))
+    GUT_PROPERTY(Color, caretColor, Color::black())
+    GUT_PROPERTY(Color, selectionColor, Color::fromRgba8(0, 120, 212, 80))
+    GUT_PROPERTY(f32, borderWidth, 1.0f)
+    GUT_PROPERTY(f32, cornerRadius, 4.0f)
+    GUT_PROPERTY(f32, fontSize, 14.0f)
+    GUT_PROPERTY(bool, readOnly, false)
+    GUT_PROPERTY(bool, isPassword, false)
+    GUT_PROPERTY(char, passwordChar, '\xE2')  // bullet char placeholder, we use Unicode below
+
+    // -------------------------------------------------------------------------
+    // Selection
+    // -------------------------------------------------------------------------
+
+    /// Caret position (0 = before first char, text.length() = after last char)
+    i32 caretPosition() const { return m_caretPos; }
+    void setCaretPosition(i32 pos);
+
+    /// Selection anchor (where selection started); -1 = no selection
+    i32 selectionStart() const;
+    i32 selectionEnd() const;
+    bool hasSelection() const { return m_selAnchor >= 0 && m_selAnchor != m_caretPos; }
+    String selectedText() const;
+
+    /// Select a range
+    void select(i32 start, i32 end);
+    void selectAll();
+    void clearSelection();
+
+    // -------------------------------------------------------------------------
+    // Signals
+    // -------------------------------------------------------------------------
+
+    Signal<const String&> textChanged;  // emitted on every edit
+    Signal<> submitted;                 // emitted on Return/Enter
+
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+
+    void setOnTextChanged(std::function<void(const String&)> cb) { m_onTextChanged = std::move(cb); }
+    void setOnSubmit(std::function<void()> cb) { m_onSubmit = std::move(cb); }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+    void onFocusGained() override;
+    void onFocusLost() override;
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+
+private:
+    /// Returns the display string (bullets for password mode, real text otherwise)
+    String displayText() const;
+
+    /// Insert text at caret, replacing selection if any
+    void insertText(const String& str);
+    /// Delete selection or N chars (negative = before caret, positive = after)
+    void deleteText(i32 count);
+    /// Move caret, optionally extending selection
+    void moveCaret(i32 newPos, bool selecting);
+    /// Find the character index closest to a local x coordinate
+    i32 hitTestCaret(f32 localX) const;
+    /// Measure the width of text[0..pos)
+    f32 measureSubstring(i32 pos) const;
+    /// Ensure caret is scrolled into view
+    void scrollToCaret();
+
+    // Word boundary helpers
+    i32 wordBoundaryLeft(i32 pos) const;
+    i32 wordBoundaryRight(i32 pos) const;
+
+    // Caret
+    i32 m_caretPos{0};
+    i32 m_selAnchor{-1};  // -1 = no selection
+    f32 m_scrollOffset{0.0f};  // horizontal scroll for long text
+    f32 m_caretBlinkTimer{0.0f};
+    bool m_caretVisible{true};
+
+    // Callbacks
+    std::function<void(const String&)> m_onTextChanged;
+    std::function<void()> m_onSubmit;
 };
 
 } // namespace gut
@@ -10381,8 +10530,8 @@ void RenderContext::save() {
 
 void RenderContext::restore() {
     if (m_stateStack.size() > 1) {
-        m_stateStack.pop();
         m_currentState = m_stateStack.top();
+        m_stateStack.pop();
     }
 }
 
@@ -10723,6 +10872,22 @@ void RenderContext::addLine(Point2f p1, Point2f p2, Color color, f32 thickness) 
 }
 
 // Drawing primitives
+
+void RenderContext::fillTriangle(Point2f p1, Point2f p2, Point2f p3, Color color) {
+    Point2f t0 = transformPoint(p1);
+    Point2f t1 = transformPoint(p2);
+    Point2f t2 = transformPoint(p3);
+    u32 c = packColor(color, m_currentState.opacity);
+    Vertex verts[3] = {
+        {t0.x, t0.y, 0, 0, c},
+        {t1.x, t1.y, 0, 0, c},
+        {t2.x, t2.y, 0, 0, c}
+    };
+    u32 inds[3] = {0, 1, 2};
+    u32 vertOffset = addVertices(verts, 3);
+    addIndices(inds, 3, vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, 3);
+}
 
 void RenderContext::fillRect(Rectf rect, Color color) {
     addRect(rect, color);
@@ -11405,34 +11570,6 @@ void FocusManager::focusPrevious() {
     }
 }
 
-Element* FocusManager::findNextFocusable(Element* current, bool forward) {
-    std::vector<Element*> focusable;
-    collectFocusableElements(m_context.root(), focusable);
-    
-    if (focusable.empty()) {
-        return nullptr;
-    }
-    
-    // Find current element in list
-    isize currentIndex = -1;
-    for (usize i = 0; i < focusable.size(); ++i) {
-        if (focusable[i] == current) {
-            currentIndex = static_cast<isize>(i);
-            break;
-        }
-    }
-    
-    // Find next/previous
-    if (forward) {
-        isize nextIndex = (currentIndex + 1) % static_cast<isize>(focusable.size());
-        return focusable[static_cast<usize>(nextIndex)];
-    } else {
-        isize prevIndex = currentIndex - 1;
-        if (prevIndex < 0) prevIndex = static_cast<isize>(focusable.size()) - 1;
-        return focusable[static_cast<usize>(prevIndex)];
-    }
-}
-
 Element* FocusManager::findFocusableInDirection(Element* current, FocusDirection direction) {
     if (direction == FocusDirection::Next) {
         return findNextFocusable(current, true);
@@ -11455,6 +11592,40 @@ void FocusManager::collectFocusableElements(Element* root, std::vector<Element*>
     
     for (usize i = 0; i < root->childCount(); ++i) {
         collectFocusableElements(root->childAt(i), result);
+    }
+}
+
+Element* FocusManager::findNextFocusable(Element* current, bool forward) {
+    std::vector<Element*> focusable;
+    collectFocusableElements(m_context.root(), focusable);
+    
+    if (focusable.empty()) {
+        return nullptr;
+    }
+    
+    // Sort by tabIndex (stable sort preserves tree order for equal tabIndex)
+    std::stable_sort(focusable.begin(), focusable.end(),
+                     [](const Element* a, const Element* b) {
+                         return a->tabIndex() < b->tabIndex();
+                     });
+    
+    // Find current element in list
+    isize currentIndex = -1;
+    for (usize i = 0; i < focusable.size(); ++i) {
+        if (focusable[i] == current) {
+            currentIndex = static_cast<isize>(i);
+            break;
+        }
+    }
+    
+    // Find next/previous
+    if (forward) {
+        isize nextIndex = (currentIndex + 1) % static_cast<isize>(focusable.size());
+        return focusable[static_cast<usize>(nextIndex)];
+    } else {
+        isize prevIndex = currentIndex - 1;
+        if (prevIndex < 0) prevIndex = static_cast<isize>(focusable.size()) - 1;
+        return focusable[static_cast<usize>(prevIndex)];
     }
 }
 
@@ -11569,6 +11740,18 @@ void InputManager::processKey(Key key, bool pressed, ModifierKeys mods) {
     if (target) {
         KeyEvent event = createKeyEvent(pressed ? KeyEventType::KeyDown : KeyEventType::KeyUp, key);
         dispatchKeyEvent(target, event);
+
+        // If Tab wasn't consumed by the focused element, do focus navigation
+        if (pressed && key == Key::Tab && !event.handled) {
+            if (hasModifier(mods, ModifierKeys::Shift)) {
+                m_context.focusManager().focusPrevious();
+            } else {
+                m_context.focusManager().focusNext();
+            }
+        }
+    } else if (pressed && key == Key::Tab) {
+        // Nothing focused — Tab focuses the first focusable element
+        m_context.focusManager().focusNext();
     }
 }
 
@@ -14152,11 +14335,13 @@ Element* Panel::hitTest(Point2f point) {
         return nullptr;
     }
     
-    // Build sorted order by zIndex descending (highest = topmost, hit-tested first)
+    // Build in reverse insertion order then sort descending by zIndex.
+    // stable_sort preserves reverse-insertion order for equal zIndex,
+    // so last-added children (visually topmost) are hit-tested first.
     std::vector<Element*> sorted;
     sorted.reserve(m_children.size());
-    for (const auto& child : m_children) {
-        sorted.push_back(child.get());
+    for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
+        sorted.push_back(it->get());
     }
     std::stable_sort(sorted.begin(), sorted.end(),
                      [](const Element* a, const Element* b) {
@@ -15005,10 +15190,16 @@ void Button::onRender(RenderContext& ctx) {
         }
     }
     
-    // Draw focus indicator
+    // Draw focus indicator — prominent outer ring
     if (isFocused()) {
-        Rectf focusRect = {2, 2, bounds().width - 4, bounds().height - 4};
-        ctx.strokeRoundedRect(focusRect, cornerRadius() - 2, Color::fromHex(0x0078D4), 2.0f);
+        Color fc = focusBorderColor();
+        // Outer glow ring (2px outside the button)
+        Rectf outerRect = {-3, -3, bounds().width + 6, bounds().height + 6};
+        ctx.strokeRoundedRect(outerRect, cornerRadius() + 3, fc, 2.0f);
+        // Inner highlight ring
+        Rectf innerRect = {1, 1, bounds().width - 2, bounds().height - 2};
+        ctx.strokeRoundedRect(innerRect, std::max(cornerRadius() - 1, 0.0f),
+                              Color(fc.r, fc.g, fc.b, 0.4f), 1.5f);
     }
 }
 
@@ -15254,6 +15445,7 @@ void ScrollViewer::scrollToTop() {
 
 void ScrollViewer::scrollToBottom() {
     scrollTo(horizontalOffset(), m_scrollableHeight - m_viewportHeight);
+    m_pendingScrollToBottom = true;
 }
 
 Size2f ScrollViewer::measureOverride(Size2f availableSize) {
@@ -15276,6 +15468,18 @@ Size2f ScrollViewer::measureOverride(Size2f availableSize) {
     
     m_scrollableWidth = contentSize.width;
     m_scrollableHeight = contentSize.height;
+    
+    // If vertical scrollbar will be needed and horizontal is disabled,
+    // re-measure with reduced width to account for scrollbar space
+    if (horizontalScrollBarVisibility() == ScrollBarVisibility::Disabled &&
+        verticalScrollBarVisibility() != ScrollBarVisibility::Disabled &&
+        m_scrollableHeight > availableSize.height) {
+        contentAvailable.width = availableSize.width - scrollBarWidth();
+        m_children[0]->measure(contentAvailable);
+        contentSize = m_children[0]->desiredSize();
+        m_scrollableWidth = contentSize.width;
+        m_scrollableHeight = contentSize.height;
+    }
     
     // Return available size (we take whatever space is given)
     return availableSize;
@@ -15304,6 +15508,14 @@ Size2f ScrollViewer::arrangeOverride(Size2f finalSize) {
     needsHScroll = needsHorizontalScrollBar();
     needsVScroll = needsVerticalScrollBar();
     
+    // Clamp scroll offsets (or apply pending scrollToBottom with up-to-date measurements)
+    if (m_pendingScrollToBottom) {
+        scrollTo(horizontalOffset(), m_scrollableHeight - m_viewportHeight);
+        m_pendingScrollToBottom = false;
+    } else {
+        scrollTo(horizontalOffset(), verticalOffset());
+    }
+    
     // Arrange content at scroll offset
     Size2f contentSize = {
         std::max(m_scrollableWidth, m_viewportWidth),
@@ -15311,9 +15523,6 @@ Size2f ScrollViewer::arrangeOverride(Size2f finalSize) {
     };
     
     m_children[0]->arrange({-horizontalOffset(), -verticalOffset(), contentSize.width, contentSize.height});
-    
-    // Clamp scroll offsets
-    scrollTo(horizontalOffset(), verticalOffset());
     
     return finalSize;
 }
@@ -15335,18 +15544,51 @@ void ScrollViewer::onRender(RenderContext& ctx) {
     
     if (needsVScroll) {
         f32 trackX = bounds().width - scrollBarWidth();
+        f32 arrowH = scrollArrowSize();
         f32 trackHeight = m_viewportHeight;
         
-        // Track
+        // Track background
         ctx.fillRect({trackX, 0, scrollBarWidth(), trackHeight}, scrollBarBackground());
         
-        // Thumb
-        f32 thumbHeight = (m_viewportHeight / m_scrollableHeight) * trackHeight;
-        thumbHeight = std::max(thumbHeight, 20.0f);  // Minimum thumb size
-        f32 thumbY = (verticalOffset() / (m_scrollableHeight - m_viewportHeight)) * (trackHeight - thumbHeight);
+        // Up arrow button
+        if (arrowH > 0) {
+            Rectf ar = {trackX, 0, scrollBarWidth(), arrowH};
+            Color arC = m_upArrowPressed ? scrollBarThumbDrag()
+                      : m_upArrowHovered ? scrollBarThumbHover()
+                      : scrollBarThumb();
+            ctx.fillRect(ar, arC);
+            // Draw up triangle
+            f32 cx = trackX + scrollBarWidth() * 0.5f;
+            f32 cy = arrowH * 0.5f;
+            f32 sz = 3.0f;
+            ctx.fillTriangle({cx, cy - sz}, {cx - sz, cy + sz}, {cx + sz, cy + sz},
+                             Color::fromHex(0x404040));
+        }
         
-        Color thumbColor = m_verticalThumbHovered ? scrollBarThumbHover() : scrollBarThumb();
-        ctx.fillRoundedRect({trackX + 2, thumbY + 2, scrollBarWidth() - 4, thumbHeight - 4}, 3, thumbColor);
+        // Down arrow button
+        if (arrowH > 0) {
+            Rectf ar = {trackX, trackHeight - arrowH, scrollBarWidth(), arrowH};
+            Color arC = m_downArrowPressed ? scrollBarThumbDrag()
+                      : m_downArrowHovered ? scrollBarThumbHover()
+                      : scrollBarThumb();
+            ctx.fillRect(ar, arC);
+            // Draw down triangle
+            f32 cx = trackX + scrollBarWidth() * 0.5f;
+            f32 cy = trackHeight - arrowH * 0.5f;
+            f32 sz = 3.0f;
+            ctx.fillTriangle({cx, cy + sz}, {cx - sz, cy - sz}, {cx + sz, cy - sz},
+                             Color::fromHex(0x404040));
+        }
+        
+        // Thumb
+        Rectf thumb = verticalThumbRect();
+        if (thumb.height > 0) {
+            Color thumbColor = m_draggingVertical ? scrollBarThumbDrag()
+                             : m_verticalThumbHovered ? scrollBarThumbHover()
+                             : scrollBarThumb();
+            ctx.fillRoundedRect({thumb.x + 2, thumb.y + 1, thumb.width - 4, thumb.height - 2},
+                                3, thumbColor);
+        }
     }
     
     if (needsHScroll) {
@@ -15366,15 +15608,153 @@ void ScrollViewer::onRender(RenderContext& ctx) {
     }
 }
 
+Rectf ScrollViewer::verticalTrackRect() const {
+    f32 trackX = bounds().width - scrollBarWidth();
+    f32 arrowH = scrollArrowSize();
+    return {trackX, arrowH, scrollBarWidth(), m_viewportHeight - arrowH * 2};
+}
+
+Rectf ScrollViewer::verticalThumbRect() const {
+    f32 trackX = bounds().width - scrollBarWidth();
+    f32 arrowH = scrollArrowSize();
+    f32 innerHeight = m_viewportHeight - arrowH * 2;
+    f32 maxScroll = m_scrollableHeight - m_viewportHeight;
+    if (maxScroll <= 0 || innerHeight <= 0) return {trackX, arrowH, scrollBarWidth(), 0};
+    
+    f32 thumbHeight = std::max((m_viewportHeight / m_scrollableHeight) * innerHeight, 20.0f);
+    f32 thumbY = arrowH + (verticalOffset() / maxScroll) * (innerHeight - thumbHeight);
+    return {trackX, thumbY, scrollBarWidth(), thumbHeight};
+}
+
+Rectf ScrollViewer::verticalUpArrowRect() const {
+    f32 trackX = bounds().width - scrollBarWidth();
+    return {trackX, 0, scrollBarWidth(), scrollArrowSize()};
+}
+
+Rectf ScrollViewer::verticalDownArrowRect() const {
+    f32 trackX = bounds().width - scrollBarWidth();
+    return {trackX, m_viewportHeight - scrollArrowSize(), scrollBarWidth(), scrollArrowSize()};
+}
+
 bool ScrollViewer::onMouseEvent(const MouseEvent& event) {
     if (event.type == MouseEventType::Wheel) {
-        scrollBy(-event.delta.x * 40, -event.delta.y * 40);
+        scrollBy(-event.delta.x, -event.delta.y);
         return true;
     }
     
-    // TODO: Implement scrollbar dragging
+    bool needsVScroll = needsVerticalScrollBar();
+    Point2f pos = event.position;
+    
+    if (needsVScroll) {
+        Rectf thumb = verticalThumbRect();
+        Rectf upArr = verticalUpArrowRect();
+        Rectf downArr = verticalDownArrowRect();
+        Rectf track = verticalTrackRect();
+        
+        bool inThumb = pos.x >= thumb.x && pos.x < thumb.x + thumb.width &&
+                       pos.y >= thumb.y && pos.y < thumb.y + thumb.height;
+        bool inUpArr = pos.x >= upArr.x && pos.x < upArr.x + upArr.width &&
+                       pos.y >= upArr.y && pos.y < upArr.y + upArr.height;
+        bool inDownArr = pos.x >= downArr.x && pos.x < downArr.x + downArr.width &&
+                         pos.y >= downArr.y && pos.y < downArr.y + downArr.height;
+        bool inTrack = pos.x >= track.x && pos.x < track.x + track.width &&
+                       pos.y >= track.y && pos.y < track.y + track.height;
+        
+        switch (event.type) {
+            case MouseEventType::ButtonDown:
+                if (event.button == MouseButton::Left) {
+                    if (inThumb) {
+                        // Start dragging thumb
+                        m_draggingVertical = true;
+                        m_dragStartOffset = verticalOffset();
+                        m_dragStartMouse = pos.y;
+                        if (context()) context()->inputManager().captureMouse(this);
+                        return true;
+                    } else if (inUpArr) {
+                        m_upArrowPressed = true;
+                        scrollBy(0, -30);
+                        invalidateRender();
+                        return true;
+                    } else if (inDownArr) {
+                        m_downArrowPressed = true;
+                        scrollBy(0, 30);
+                        invalidateRender();
+                        return true;
+                    } else if (inTrack && !inThumb) {
+                        // Click in track — page scroll toward click
+                        if (pos.y < thumb.y) {
+                            scrollBy(0, -m_viewportHeight * 0.8f);
+                        } else {
+                            scrollBy(0, m_viewportHeight * 0.8f);
+                        }
+                        return true;
+                    }
+                }
+                break;
+                
+            case MouseEventType::ButtonUp:
+                if (event.button == MouseButton::Left) {
+                    if (m_draggingVertical) {
+                        m_draggingVertical = false;
+                        if (context()) context()->inputManager().releaseMouse();
+                        invalidateRender();
+                        return true;
+                    }
+                    if (m_upArrowPressed || m_downArrowPressed) {
+                        m_upArrowPressed = false;
+                        m_downArrowPressed = false;
+                        invalidateRender();
+                        return true;
+                    }
+                }
+                break;
+                
+            case MouseEventType::Move: {
+                if (m_draggingVertical) {
+                    // Map mouse delta to scroll delta
+                    f32 arrowH = scrollArrowSize();
+                    f32 innerHeight = m_viewportHeight - arrowH * 2;
+                    f32 thumbHeight = std::max((m_viewportHeight / m_scrollableHeight) * innerHeight, 20.0f);
+                    f32 trackRange = innerHeight - thumbHeight;
+                    if (trackRange > 0) {
+                        f32 mouseDelta = pos.y - m_dragStartMouse;
+                        f32 scrollRange = m_scrollableHeight - m_viewportHeight;
+                        f32 newOffset = m_dragStartOffset + (mouseDelta / trackRange) * scrollRange;
+                        scrollTo(horizontalOffset(), newOffset);
+                    }
+                    invalidateRender();
+                    return true;
+                }
+                // Hover detection
+                bool newThumbHover = inThumb;
+                bool newUpHover = inUpArr;
+                bool newDownHover = inDownArr;
+                if (newThumbHover != m_verticalThumbHovered ||
+                    newUpHover != m_upArrowHovered ||
+                    newDownHover != m_downArrowHovered) {
+                    m_verticalThumbHovered = newThumbHover;
+                    m_upArrowHovered = newUpHover;
+                    m_downArrowHovered = newDownHover;
+                    invalidateRender();
+                }
+                break;
+            }
+                
+            default:
+                break;
+        }
+    }
     
     return false;
+}
+
+void ScrollViewer::onMouseLeave() {
+    if (m_verticalThumbHovered || m_upArrowHovered || m_downArrowHovered) {
+        m_verticalThumbHovered = false;
+        m_upArrowHovered = false;
+        m_downArrowHovered = false;
+        invalidateRender();
+    }
 }
 
 void ScrollViewer::updateScrollBars() {
@@ -15406,6 +15786,520 @@ bool ScrollViewer::needsVerticalScrollBar() const {
             return m_scrollableHeight > m_viewportHeight;
     }
     return false;
+}
+
+} // namespace gut
+
+
+// --- elements/TextBox.cpp ---
+
+
+namespace gut {
+
+TextBox::TextBox() {
+    setfocusable(true);
+    setpadding(Thickness{6, 4, 6, 4});
+}
+
+TextBox::TextBox(String initialText) {
+    settext(std::move(initialText));
+    m_caretPos = static_cast<i32>(text().size());
+    setfocusable(true);
+    setpadding(Thickness{6, 4, 6, 4});
+}
+
+void TextBox::setCaretPosition(i32 pos) {
+    m_caretPos = std::clamp(pos, 0, static_cast<i32>(text().size()));
+    m_caretBlinkTimer = 0.0f;
+    m_caretVisible = true;
+}
+
+i32 TextBox::selectionStart() const {
+    if (m_selAnchor < 0) return m_caretPos;
+    return std::min(m_selAnchor, m_caretPos);
+}
+
+i32 TextBox::selectionEnd() const {
+    if (m_selAnchor < 0) return m_caretPos;
+    return std::max(m_selAnchor, m_caretPos);
+}
+
+String TextBox::selectedText() const {
+    if (!hasSelection()) return "";
+    return text().substr(selectionStart(), selectionEnd() - selectionStart());
+}
+
+void TextBox::select(i32 start, i32 end) {
+    i32 len = static_cast<i32>(text().size());
+    m_selAnchor = std::clamp(start, 0, len);
+    m_caretPos = std::clamp(end, 0, len);
+}
+
+void TextBox::selectAll() {
+    m_selAnchor = 0;
+    m_caretPos = static_cast<i32>(text().size());
+}
+
+void TextBox::clearSelection() {
+    m_selAnchor = -1;
+}
+
+void TextBox::insertText(const String& str) {
+    if (readOnly()) return;
+    String t = text();
+    if (hasSelection()) {
+        i32 s = selectionStart();
+        i32 e = selectionEnd();
+        t.erase(s, e - s);
+        m_caretPos = s;
+    }
+    m_selAnchor = -1;
+    t.insert(m_caretPos, str);
+    m_caretPos += static_cast<i32>(str.size());
+    settext(std::move(t));
+    scrollToCaret();
+    textChanged.emit(text());
+    if (m_onTextChanged) m_onTextChanged(text());
+    invalidateLayout();
+    invalidateRender();
+}
+
+void TextBox::deleteText(i32 count) {
+    if (readOnly()) return;
+    String t = text();
+    if (hasSelection()) {
+        i32 s = selectionStart();
+        i32 e = selectionEnd();
+        t.erase(s, e - s);
+        m_caretPos = s;
+    } else if (count < 0) {
+        // Backspace
+        i32 deleteCount = std::min(-count, m_caretPos);
+        if (deleteCount > 0) {
+            t.erase(m_caretPos - deleteCount, deleteCount);
+            m_caretPos -= deleteCount;
+        }
+    } else if (count > 0) {
+        // Delete forward
+        i32 deleteCount = std::min(count, static_cast<i32>(t.size()) - m_caretPos);
+        if (deleteCount > 0) {
+            t.erase(m_caretPos, deleteCount);
+        }
+    }
+    m_selAnchor = -1;
+    settext(std::move(t));
+    scrollToCaret();
+    textChanged.emit(text());
+    if (m_onTextChanged) m_onTextChanged(text());
+    invalidateLayout();
+    invalidateRender();
+}
+
+void TextBox::moveCaret(i32 newPos, bool selecting) {
+    i32 len = static_cast<i32>(text().size());
+    newPos = std::clamp(newPos, 0, len);
+    if (selecting) {
+        if (m_selAnchor < 0) m_selAnchor = m_caretPos;
+    } else {
+        m_selAnchor = -1;
+    }
+    m_caretPos = newPos;
+    m_caretBlinkTimer = 0.0f;
+    m_caretVisible = true;
+    scrollToCaret();
+    invalidateRender();
+}
+
+String TextBox::displayText() const {
+    const String& t = text();
+    if (!isPassword() || t.empty()) return t;
+    // Use ASCII bullet substitute (renderer only supports ASCII 32-126)
+    return String(t.size(), '*');
+}
+
+i32 TextBox::hitTestCaret(f32 localX) const {
+    f32 textX = localX - padding().left + m_scrollOffset;
+    const String& t = displayText();
+    if (t.empty()) return 0;
+
+    // Use font system to measure character by character
+    FontFace* face = nullptr;
+    if (context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto faceRef = font->getFace(fontSize());
+            face = faceRef.get();
+        }
+    }
+
+    // Iterate by logical character count, measuring the display glyph.
+    i32 logicalLen = static_cast<i32>(text().size());
+    f32 x = 0.0f;
+    for (i32 i = 0; i < logicalLen; ++i) {
+        f32 charW = 0.0f;
+        if (face) {
+            char32_t ch = isPassword() ? U'*' : static_cast<char32_t>(text()[i]);
+            auto g = face->glyph(static_cast<u32>(ch));
+            charW = g ? g->advance : fontSize() * 0.5f;
+        } else {
+            charW = fontSize() * 0.5f;
+        }
+        if (textX < x + charW * 0.5f) return i;
+        x += charW;
+    }
+    return logicalLen;
+}
+
+f32 TextBox::measureSubstring(i32 pos) const {
+    if (pos <= 0) return 0.0f;
+    String dt = displayText();
+    String sub = dt.substr(0, std::min(pos, static_cast<i32>(dt.size())));
+
+    if (context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                return face->measureWidth(sub);
+            }
+        }
+    }
+    return static_cast<f32>(sub.size()) * fontSize() * 0.5f;
+}
+
+void TextBox::scrollToCaret() {
+    f32 caretX = measureSubstring(m_caretPos);
+    f32 pad = padding().left + padding().right;
+    f32 viewW = bounds().width > 0 ? bounds().width - pad : 200.0f;
+
+    if (caretX - m_scrollOffset > viewW) {
+        m_scrollOffset = caretX - viewW;
+    }
+    if (caretX - m_scrollOffset < 0) {
+        m_scrollOffset = caretX;
+    }
+    if (m_scrollOffset < 0) m_scrollOffset = 0;
+}
+
+i32 TextBox::wordBoundaryLeft(i32 pos) const {
+    const String& t = text();
+    if (pos <= 0) return 0;
+    i32 i = pos - 1;
+    // Skip non-alphanumeric
+    while (i > 0 && !std::isalnum(static_cast<unsigned char>(t[i]))) --i;
+    // Skip alphanumeric
+    while (i > 0 && std::isalnum(static_cast<unsigned char>(t[i - 1]))) --i;
+    return i;
+}
+
+i32 TextBox::wordBoundaryRight(i32 pos) const {
+    const String& t = text();
+    i32 len = static_cast<i32>(t.size());
+    if (pos >= len) return len;
+    i32 i = pos;
+    // Skip alphanumeric
+    while (i < len && std::isalnum(static_cast<unsigned char>(t[i]))) ++i;
+    // Skip non-alphanumeric
+    while (i < len && !std::isalnum(static_cast<unsigned char>(t[i]))) ++i;
+    return i;
+}
+
+Size2f TextBox::measureOverride(Size2f availableSize) {
+    const auto& pad = padding();
+    f32 textH = fontSize() * 1.2f;
+    if (context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) textH = face->lineHeight();
+        }
+    }
+    // Width: use available or a sensible default
+    f32 w = (width() > 0) ? width() : std::min(availableSize.width, 200.0f);
+    f32 h = textH + pad.verticalSum() + borderWidth() * 2;
+    return {w, h};
+}
+
+void TextBox::onRender(RenderContext& ctx) {
+    Rectf rect = {0, 0, bounds().width, bounds().height};
+    const auto& pad = padding();
+
+    // Background
+    Color bg = background();
+    if (cornerRadius() > 0) {
+        ctx.fillRoundedRect(rect, cornerRadius(), bg);
+    } else {
+        ctx.fillRect(rect, bg);
+    }
+
+    // Border
+    Color bc = isFocused() ? focusBorderColor() : borderColor();
+    f32 bw = isFocused() ? std::max(borderWidth(), 2.0f) : borderWidth();
+    if (bw > 0) {
+        if (cornerRadius() > 0) {
+            ctx.strokeRoundedRect(rect, cornerRadius(), bc, bw);
+        } else {
+            ctx.strokeRect(rect, bc, bw);
+        }
+    }
+
+    // Clip text area
+    Rectf textClip = {pad.left, pad.top,
+                      bounds().width - pad.horizontalSum(),
+                      bounds().height - pad.verticalSum()};
+    ctx.pushClip(textClip, std::max(cornerRadius() - 2.0f, 0.0f));
+
+    const String& t = text();
+    String dt = displayText();
+    bool showPlaceholder = t.empty() && !placeholder().empty();
+
+    FontFace* face = nullptr;
+    if (context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto faceRef = font->getFace(fontSize());
+            face = faceRef.get();
+        }
+    }
+
+    f32 baseline = pad.top;
+    if (face) {
+        baseline += face->ascender();
+    } else {
+        baseline += fontSize();
+    }
+
+    // Draw selection highlight
+    if (isFocused() && hasSelection() && face) {
+        i32 s = selectionStart();
+        i32 e = selectionEnd();
+        f32 sx = pad.left + measureSubstring(s) - m_scrollOffset;
+        f32 ex = pad.left + measureSubstring(e) - m_scrollOffset;
+        Rectf selRect = {sx, pad.top, ex - sx, bounds().height - pad.verticalSum()};
+        ctx.fillRect(selRect, selectionColor());
+    }
+
+    // Draw text or placeholder
+    if (face) {
+        if (showPlaceholder) {
+            ctx.drawText(face, placeholder(), {pad.left, baseline}, placeholderColor());
+        } else if (!t.empty()) {
+            ctx.drawText(face, dt, {pad.left - m_scrollOffset, baseline}, foreground());
+        }
+    }
+
+    // Draw caret
+    if (isFocused() && m_caretVisible && !readOnly()) {
+        f32 caretX = pad.left + measureSubstring(m_caretPos) - m_scrollOffset;
+        ctx.fillRect({caretX, pad.top, 1.5f, bounds().height - pad.verticalSum()}, caretColor());
+    }
+
+    ctx.popClip();
+
+    // Update caret blink (simple timer, ~530ms period)
+    m_caretBlinkTimer += 16.6f;  // approximate frame time
+    if (m_caretBlinkTimer >= 530.0f) {
+        m_caretBlinkTimer = 0.0f;
+        m_caretVisible = !m_caretVisible;
+    }
+}
+
+bool TextBox::onMouseEvent(const MouseEvent& event) {
+    if (!isEnabled()) return false;
+
+    switch (event.type) {
+        case MouseEventType::ButtonDown:
+            if (event.button == MouseButton::Left) {
+                // Click-to-focus
+                if (context()) {
+                    context()->focusManager().setFocus(this);
+                }
+                i32 pos = hitTestCaret(event.position.x);
+                if (event.clickCount == 2) {
+                    // Double-click selects word
+                    m_selAnchor = wordBoundaryLeft(pos);
+                    m_caretPos = wordBoundaryRight(pos);
+                } else {
+                    bool shift = hasModifier(event.modifiers, ModifierKeys::Shift);
+                    moveCaret(pos, shift);
+                }
+                // Capture mouse for drag selection
+                if (context()) {
+                    context()->inputManager().captureMouse(this);
+                }
+                return true;
+            }
+            break;
+
+        case MouseEventType::ButtonUp:
+            if (event.button == MouseButton::Left) {
+                if (context()) {
+                    context()->inputManager().releaseMouse();
+                }
+                return true;
+            }
+            break;
+
+        case MouseEventType::Move:
+            // Drag selection
+            if (context() && context()->inputManager().capturedElement() == this) {
+                if (context()->inputManager().isMouseButtonDown(MouseButton::Left)) {
+                    i32 pos = hitTestCaret(event.position.x);
+                    if (m_selAnchor < 0) m_selAnchor = m_caretPos;
+                    m_caretPos = pos;
+                    m_caretBlinkTimer = 0.0f;
+                    m_caretVisible = true;
+                    scrollToCaret();
+                    invalidateRender();
+                    return true;
+                }
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    return false;
+}
+
+bool TextBox::onKeyEvent(const KeyEvent& event) {
+    if (!isEnabled()) return false;
+
+    // Text input (Char events)
+    if (event.isChar()) {
+        if (event.character >= 32 && !event.hasControl()) {
+            char buf[4];
+            // Simple ASCII for now; UTF-8 extension would go here
+            if (event.character < 128) {
+                buf[0] = static_cast<char>(event.character);
+                buf[1] = '\0';
+                insertText(buf);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    if (!event.isKeyDown()) return false;
+
+    bool shift = event.hasShift();
+    bool cmd = event.hasControl();  // Cmd on macOS maps to Control modifier
+
+    switch (event.key) {
+        case Key::Left:
+            if (cmd) {
+                moveCaret(wordBoundaryLeft(m_caretPos), shift);
+            } else if (!shift && hasSelection()) {
+                i32 s = selectionStart();
+                clearSelection();
+                moveCaret(s, false);
+            } else {
+                moveCaret(m_caretPos - 1, shift);
+            }
+            return true;
+
+        case Key::Right:
+            if (cmd) {
+                moveCaret(wordBoundaryRight(m_caretPos), shift);
+            } else if (!shift && hasSelection()) {
+                i32 e = selectionEnd();
+                clearSelection();
+                moveCaret(e, false);
+            } else {
+                moveCaret(m_caretPos + 1, shift);
+            }
+            return true;
+
+        case Key::Home:
+            moveCaret(0, shift);
+            return true;
+
+        case Key::End:
+            moveCaret(static_cast<i32>(text().size()), shift);
+            return true;
+
+        case Key::Backspace:
+            if (cmd) {
+                // Cmd+Backspace = delete to beginning of line
+                if (!hasSelection()) {
+                    m_selAnchor = m_caretPos;
+                    m_caretPos = 0;
+                }
+                deleteText(-1);
+            } else {
+                deleteText(-1);
+            }
+            return true;
+
+        case Key::Delete:
+            deleteText(1);
+            return true;
+
+        case Key::Return:
+        case Key::NumpadEnter:
+            submitted.emit();
+            if (m_onSubmit) m_onSubmit();
+            return true;
+
+        case Key::A:
+            if (cmd) { selectAll(); invalidateRender(); return true; }
+            break;
+
+        case Key::C:
+            if (cmd && hasSelection()) {
+                // Copy — platform-specific. We'll just store in a static for now.
+                // In a real app, this would go to the system clipboard.
+                return true;
+            }
+            break;
+
+        case Key::V:
+            if (cmd) {
+                // Paste — would read from system clipboard.
+                return true;
+            }
+            break;
+
+        case Key::X:
+            if (cmd && hasSelection()) {
+                // Cut — copy + delete selection
+                deleteText(0);
+                return true;
+            }
+            break;
+
+        case Key::Tab:
+            return false;  // Let tab navigate to next control
+
+        default:
+            break;
+    }
+
+    return false;
+}
+
+void TextBox::onFocusGained() {
+    Element::onFocusGained();
+    m_caretBlinkTimer = 0.0f;
+    m_caretVisible = true;
+    invalidateRender();
+}
+
+void TextBox::onFocusLost() {
+    Element::onFocusLost();
+    clearSelection();
+    invalidateRender();
+}
+
+void TextBox::onMouseEnter() {
+    Element::onMouseEnter();
+    invalidateRender();
+}
+
+void TextBox::onMouseLeave() {
+    Element::onMouseLeave();
+    invalidateRender();
 }
 
 } // namespace gut
