@@ -10,6 +10,7 @@
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <simd/simd.h>
 
 namespace gut {
 
@@ -53,9 +54,26 @@ public:
     void renderText(const TextLayout& layout, Point2f position, Color color,
                    std::vector<Vertex>& vertices, std::vector<u32>& indices) override;
 
+    // 3D background scene
+    void enableScene3D(bool enabled);
+
 private:
     void createBuffers();
     void createPipelineState();
+    void createBlurResources();
+    void ensureBlurTextures(u32 width, u32 height);
+    
+    // Perform multi-pass Kawase blur and draw result
+    void executeBackdropBlur(const DrawCommand& cmd,
+                             const simd::float4x4& projection);
+    
+    // Resume the main render pass after blur
+    void resumeMainRenderPass();
+
+    // 3D spinning cube
+    void create3DResources();
+    void render3DCube(id<MTLRenderCommandEncoder> encoder);
+    void ensureDepthTexture(u32 width, u32 height);
     
     CAMetalLayer* m_layer;
     id<MTLDevice> m_device;
@@ -63,12 +81,41 @@ private:
     id<MTLRenderPipelineState> m_pipelineState;
     id<MTLRenderPipelineState> m_texturePipelineState;
     
+    // Blur resources
+    id<MTLRenderPipelineState> m_blurPipelineState;
+    id<MTLRenderPipelineState> m_blurCompositePipelineState;
+    id<MTLTexture> m_blurTexA;    // ping-pong texture A
+    id<MTLTexture> m_blurTexB;    // ping-pong texture B
+    u32 m_blurTexWidth{0};
+    u32 m_blurTexHeight{0};
+
+    // 3D scene resources
+    id<MTLRenderPipelineState> m_cubePipelineState;
+    id<MTLDepthStencilState> m_cubeDepthState;
+    id<MTLBuffer> m_cubeVertexBuffer;
+    id<MTLBuffer> m_cubeIndexBuffer;
+    id<MTLTexture> m_cubeDepthTexture;
+    u32 m_depthTexWidth{0};
+    u32 m_depthTexHeight{0};
+    bool m_scene3DEnabled{false};
+
     id<MTLBuffer> m_vertexBuffer;
     id<MTLBuffer> m_indexBuffer;
     
     id<MTLCommandBuffer> m_commandBuffer;
     id<MTLRenderCommandEncoder> m_renderEncoder;
     id<CAMetalDrawable> m_drawable;
+    
+    // Clip state that needs to persist across render pass breaks
+    struct ClipUniforms {
+        simd::float4 clipRect;
+        float cornerRadius;
+        float enabled;
+        simd::float2 _pad;
+    };
+    ClipUniforms m_clipUniforms;
+    MTLScissorRect m_currentScissor;
+    bool m_hasCustomScissor{false};
     
     u32 m_frameWidth{0};
     u32 m_frameHeight{0};

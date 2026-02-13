@@ -1495,13 +1495,24 @@ struct GUT_API Vertex {
 };
 
 /**
+ * @brief Text alignment.
+ */
+enum class TextAlignment {
+    Left,
+    Center,
+    Right,
+    Justify
+};
+
+/**
  * @brief Draw command type.
  */
 enum class DrawCommandType {
     SetClip,
     ClearClip,
     DrawTriangles,
-    DrawTexturedTriangles
+    DrawTexturedTriangles,
+    DrawBackdropBlur
 };
 
 /**
@@ -1513,7 +1524,14 @@ struct GUT_API DrawCommand {
     u32 indexOffset;
     u32 indexCount;
     Rectf clipRect;
+    f32 clipCornerRadius{0};
     Texture* texture{nullptr};
+    
+    // Backdrop blur fields (used by DrawBackdropBlur)
+    Rectf blurRect;           // screen-space rect to blur
+    f32 blurRadius{0};        // blur radius in logical pixels
+    f32 blurCornerRadius{0};  // rounded corners for the blur region
+    Color blurTint{Color::transparent()};  // tint overlay
 };
 
 /**
@@ -1661,6 +1679,25 @@ public:
      * @brief Get the font texture atlas (if applicable).
      */
     virtual Texture* fontAtlas() { return nullptr; }
+    
+    /**
+     * @brief Set the backdrop source texture for frosted glass effects.
+     * 
+     * The host application should call this each frame with its rendered
+     * scene framebuffer. Panels with backdropBlur > 0 will sample and
+     * blur this texture to create a frosted glass effect.
+     * 
+     * @param texture The source framebuffer texture (read-only). Pass nullptr to disable.
+     */
+    virtual void setBackdropSource(Texture* texture) { m_backdropSource = texture; }
+    
+    /**
+     * @brief Get the current backdrop source texture.
+     */
+    Texture* backdropSource() const { return m_backdropSource; }
+
+protected:
+    Texture* m_backdropSource{nullptr};
 };
 
 /**
@@ -1802,7 +1839,7 @@ public:
     /**
      * @brief Push a rectangular clip region.
      */
-    void pushClip(Rectf rect);
+    void pushClip(Rectf rect, f32 cornerRadius = 0);
     
     /**
      * @brief Push a path-based clip region.
@@ -1845,17 +1882,35 @@ public:
     void strokeRect(Rectf rect, const Pen& pen);
     
     /**
+     * @brief Fill a rectangle with a vertical gradient.
+     */
+    void fillRectGradient(Rectf rect, Color topColor, Color bottomColor);
+
+    /**
      * @brief Fill a rounded rectangle.
      */
     void fillRoundedRect(Rectf rect, f32 cornerRadius, Color color);
     void fillRoundedRect(Rectf rect, f32 cornerRadius, const Brush& brush);
     void fillRoundedRect(Rectf rect, f32 topLeft, f32 topRight, f32 bottomRight, f32 bottomLeft, const Brush& brush);
+
+    /**
+     * @brief Fill a rounded rectangle with a vertical gradient.
+     */
+    void fillRoundedRectGradient(Rectf rect, f32 cornerRadius, Color topColor, Color bottomColor);
     
     /**
      * @brief Stroke a rounded rectangle.
      */
     void strokeRoundedRect(Rectf rect, f32 cornerRadius, Color color, f32 thickness = 1.0f);
     void strokeRoundedRect(Rectf rect, f32 cornerRadius, const Pen& pen);
+    
+    /**
+     * @brief Draw a drop shadow around a rounded rect.
+     * Builds a single quad-strip ring mesh: inner contour at shadow color,
+     * outer contour at alpha=0. GPU interpolation creates a smooth fade.
+     */
+    void drawDropShadow(Rectf rect, f32 cornerRadius, Color shadowColor,
+                        f32 blurRadius, f32 offsetX = 0, f32 offsetY = 4);
     
     /**
      * @brief Fill an ellipse.
@@ -1935,6 +1990,27 @@ public:
      * This is a convenience method that bypasses TextLayout for simple text.
      */
     void drawText(FontFace* face, const std::string& text, Point2f position, Color color);
+
+    /**
+     * @brief Draw text with word wrapping and alignment.
+     * @param face The font face to use.
+     * @param text The text string to draw.
+     * @param position The position (left, baseline of first line).
+     * @param color The text color.
+     * @param maxWidth The maximum width for word wrapping (0 = no wrap).
+     * @param alignment Text alignment within maxWidth.
+     */
+    void drawTextMultiline(FontFace* face, const std::string& text, Point2f position, Color color,
+                           f32 maxWidth, TextAlignment alignment = TextAlignment::Left);
+    
+    /**
+     * @brief Draw a backdrop blur effect (frosted glass).
+     * @param rect The rectangle to blur in local coordinates.
+     * @param cornerRadius Corner radius for the blurred region.
+     * @param blurRadius Blur strength in logical pixels.
+     * @param tint Tint color applied over the blurred backdrop.
+     */
+    void drawBackdropBlur(Rectf rect, f32 cornerRadius, f32 blurRadius, Color tint);
     
     // -------------------------------------------------------------------------
     // Backend access
@@ -1959,6 +2035,7 @@ private:
         f32 rotation{0};
         f32 opacity{1};
         Rectf clipRect{};
+        f32 clipCornerRadius{0};
         bool hasClip{false};
     };
     
@@ -1969,9 +2046,23 @@ private:
     
     // Helper for common shapes
     void addRect(Rectf rect, Color color, Texture* texture = nullptr, Rectf uvRect = {0, 0, 1, 1});
+    void addRectGradient(Rectf rect, Color topColor, Color bottomColor);
     void addRoundedRect(Rectf rect, f32 radius, Color color);
+    void addRoundedRectGradient(Rectf rect, f32 radius, Color topColor, Color bottomColor);
+    void addDropShadow(Rectf rect, f32 cornerRadius, Color shadowColor,
+                       f32 blurRadius, f32 offsetX, f32 offsetY);
     void addEllipse(Point2f center, f32 rx, f32 ry, Color color, i32 segments = 32);
     void addLine(Point2f p1, Point2f p2, Color color, f32 thickness);
+
+    // Sample a color along a gradient given a normalized t (0=top, 1=bottom)
+    Color sampleGradient(Color top, Color bottom, f32 t) {
+        return Color(
+            top.r + (bottom.r - top.r) * t,
+            top.g + (bottom.g - top.g) * t,
+            top.b + (bottom.b - top.b) * t,
+            top.a + (bottom.a - top.a) * t
+        );
+    }
     
     RenderBackend& m_backend;
     Size2f m_frameSize{};
@@ -3369,14 +3460,6 @@ enum class FontStyle {
     Oblique
 };
 
-/// Text alignment
-enum class TextAlignment {
-    Left,
-    Center,
-    Right,
-    Justify
-};
-
 /// Glyph information
 struct Glyph {
     u32 codepoint = 0;      // Unicode codepoint
@@ -3610,6 +3693,8 @@ public:
     GUT_PROPERTY(Visibility, visibility, Visibility::Visible)
     GUT_PROPERTY(f32, opacity, 1.0f)
     GUT_PROPERTY(bool, isEnabled, true)
+    GUT_PROPERTY(i32, zIndex, 0)
+    GUT_PROPERTY(bool, clipToBounds, false)
     
     // -------------------------------------------------------------------------
     // Layout results (read-only after layout)
@@ -3726,7 +3811,7 @@ public:
      * @brief Render this element and its children.
      * @param ctx The render context.
      */
-    void render(RenderContext& ctx);
+    virtual void render(RenderContext& ctx);
     
     // -------------------------------------------------------------------------
     // Input
@@ -3761,6 +3846,7 @@ public:
     // -------------------------------------------------------------------------
     
     GUT_PROPERTY(bool, focusable, false)
+    GUT_PROPERTY(bool, isHitTestVisible, true)
     GUT_PROPERTY_READONLY(bool, isFocused, false)
     GUT_PROPERTY_READONLY(bool, isHovered, false)
     GUT_PROPERTY_READONLY(bool, isPressed, false)
@@ -3810,6 +3896,11 @@ protected:
      * @param ctx The render context.
      */
     virtual void onRender(RenderContext& ctx);
+    
+    /**
+     * @brief Get corner radius for clipping. Override in Panel.
+     */
+    virtual f32 getClipCornerRadius() const { return 0.0f; }
     
     /**
      * @brief Called when focus is gained.
@@ -3896,6 +3987,31 @@ public:
     // -------------------------------------------------------------------------
     
     GUT_PROPERTY(Color, background, Color::transparent())
+    GUT_PROPERTY(Color, backgroundGradientTop, Color::transparent())
+    GUT_PROPERTY(Color, backgroundGradientBottom, Color::transparent())
+    GUT_PROPERTY(Color, hoverBackground, Color::transparent())
+    GUT_PROPERTY(Color, pressedBackground, Color::transparent())
+    GUT_PROPERTY(f32, cornerRadius, 0.0f)
+    GUT_PROPERTY(Color, borderColor, Color::transparent())
+    GUT_PROPERTY(f32, borderWidth, 0.0f)
+    
+    // -------------------------------------------------------------------------
+    // Drop Shadow
+    // -------------------------------------------------------------------------
+    
+    GUT_PROPERTY(Color, shadowColor, Color::transparent())
+    GUT_PROPERTY(f32, shadowOffsetX, 0.0f)
+    GUT_PROPERTY(f32, shadowOffsetY, 4.0f)
+    GUT_PROPERTY(f32, shadowBlurRadius, 8.0f)
+    
+    // -------------------------------------------------------------------------
+    // Backdrop Blur (frosted glass)
+    // -------------------------------------------------------------------------
+    
+    GUT_PROPERTY(f32, backdropBlur, 0.0f)
+    GUT_PROPERTY(Color, backdropTint, Color::transparent())
+    
+    void setOnClick(std::function<void()> callback) { m_onClick = std::move(callback); }
     
     // -------------------------------------------------------------------------
     // Child management
@@ -3943,7 +4059,13 @@ public:
     Element* hitTest(Point2f point) override;
 
 protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
     void onRender(RenderContext& ctx) override;
+    f32 getClipCornerRadius() const override { return cornerRadius(); }
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+    bool onMouseEvent(const MouseEvent& event) override;
     
     /**
      * @brief Render children (called by onRender after background).
@@ -3951,6 +4073,7 @@ protected:
     virtual void renderChildren(RenderContext& ctx);
     
     std::vector<Ref<Element>> m_children;
+    std::function<void()> m_onClick;
 };
 
 } // namespace gut
@@ -10293,7 +10416,7 @@ Point2f RenderContext::transformPoint(Point2f point) const {
     };
 }
 
-void RenderContext::pushClip(Rectf rect) {
+void RenderContext::pushClip(Rectf rect, f32 cornerRadius) {
     Rectf transformed = {
         rect.x + m_currentState.translateX,
         rect.y + m_currentState.translateY,
@@ -10301,17 +10424,19 @@ void RenderContext::pushClip(Rectf rect) {
         rect.height * m_currentState.scaleY
     };
     
-    if (m_currentState.hasClip) {
+    if (m_currentState.hasClip && cornerRadius <= 0) {
         transformed = transformed.intersection(m_currentState.clipRect);
     }
     
     m_currentState.clipRect = transformed;
+    m_currentState.clipCornerRadius = cornerRadius;
     m_currentState.hasClip = true;
     
     // Add clip command
     DrawCommand cmd;
     cmd.type = DrawCommandType::SetClip;
     cmd.clipRect = transformed;
+    cmd.clipCornerRadius = cornerRadius;
     cmd.vertexOffset = 0;
     cmd.indexOffset = 0;
     cmd.indexCount = 0;
@@ -10326,9 +10451,11 @@ void RenderContext::popClip() {
     if (m_stateStack.size() > 1) {
         auto parent = m_stateStack.top();
         m_currentState.clipRect = parent.clipRect;
+        m_currentState.clipCornerRadius = parent.clipCornerRadius;
         m_currentState.hasClip = parent.hasClip;
     } else {
         m_currentState.hasClip = false;
+        m_currentState.clipCornerRadius = 0;
     }
     
     DrawCommand cmd;
@@ -10451,6 +10578,92 @@ void RenderContext::addRoundedRect(Rectf rect, f32 radius, Color color) {
     addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
 }
 
+void RenderContext::addRectGradient(Rectf rect, Color topColor, Color bottomColor) {
+    Point2f p0 = transformPoint({rect.x, rect.y});
+    Point2f p1 = transformPoint({rect.x + rect.width, rect.y});
+    Point2f p2 = transformPoint({rect.x + rect.width, rect.y + rect.height});
+    Point2f p3 = transformPoint({rect.x, rect.y + rect.height});
+    
+    u32 cTop = packColor(topColor, m_currentState.opacity);
+    u32 cBot = packColor(bottomColor, m_currentState.opacity);
+    
+    Vertex verts[4] = {
+        {p0.x, p0.y, 0, 0, cTop},    // top-left
+        {p1.x, p1.y, 1, 0, cTop},    // top-right
+        {p2.x, p2.y, 1, 1, cBot},    // bottom-right
+        {p3.x, p3.y, 0, 1, cBot}     // bottom-left
+    };
+    
+    u32 inds[6] = {0, 1, 2, 0, 2, 3};
+    
+    u32 vertOffset = addVertices(verts, 4);
+    addIndices(inds, 6, vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, 6);
+}
+
+void RenderContext::addRoundedRectGradient(Rectf rect, f32 radius, Color topColor, Color bottomColor) {
+    radius = std::min(radius, std::min(rect.width, rect.height) / 2);
+    
+    if (radius <= 0) {
+        addRectGradient(rect, topColor, bottomColor);
+        return;
+    }
+    
+    const i32 cornerSegments = 8;
+    f32 h = rect.height;
+    
+    // Build vertices: center + corners (each vertex colored by its Y position)
+    std::vector<Vertex> verts;
+    
+    // Center vertex (at middle Y → blend 50%)
+    Point2f center = transformPoint({rect.x + rect.width / 2, rect.y + h / 2});
+    Color centerColor = sampleGradient(topColor, bottomColor, 0.5f);
+    u32 cCenter = packColor(centerColor, m_currentState.opacity);
+    verts.push_back({center.x, center.y, 0.5f, 0.5f, cCenter});
+    
+    // Corner centers
+    Point2f corners[4] = {
+        {rect.x + radius, rect.y + radius},                            // top-left
+        {rect.x + rect.width - radius, rect.y + radius},               // top-right
+        {rect.x + rect.width - radius, rect.y + h - radius},           // bottom-right
+        {rect.x + radius, rect.y + h - radius}                         // bottom-left
+    };
+    
+    f32 startAngles[4] = {PI, PI * 1.5f, 0, PI * 0.5f};
+    
+    for (i32 corner = 0; corner < 4; ++corner) {
+        f32 startAngle = startAngles[corner];
+        for (i32 i = 0; i <= cornerSegments; ++i) {
+            f32 angle = startAngle + (PI / 2) * i / cornerSegments;
+            f32 x = corners[corner].x + radius * std::cos(angle);
+            f32 y = corners[corner].y + radius * std::sin(angle);
+            
+            // Color based on normalized Y position within the rect
+            f32 t = (y - rect.y) / h;
+            t = std::clamp(t, 0.0f, 1.0f);
+            Color vertColor = sampleGradient(topColor, bottomColor, t);
+            u32 c = packColor(vertColor, m_currentState.opacity);
+            
+            Point2f p = transformPoint({x, y});
+            verts.push_back({p.x, p.y, 0.5f, 0.5f, c});
+        }
+    }
+    
+    u32 vertOffset = addVertices(verts.data(), static_cast<u32>(verts.size()));
+    
+    // Build indices (triangle fan from center)
+    std::vector<u32> inds;
+    u32 numOuterVerts = static_cast<u32>(verts.size() - 1);
+    for (u32 i = 0; i < numOuterVerts; ++i) {
+        inds.push_back(0);
+        inds.push_back(1 + i);
+        inds.push_back(1 + (i + 1) % numOuterVerts);
+    }
+    
+    addIndices(inds.data(), static_cast<u32>(inds.size()), vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
+}
+
 void RenderContext::addEllipse(Point2f center, f32 rx, f32 ry, Color color, i32 segments) {
     u32 c = packColor(color, m_currentState.opacity);
     
@@ -10519,8 +10732,16 @@ void RenderContext::fillRect(Rectf rect, const Brush& brush) {
     if (brush.type() == BrushType::Solid) {
         auto& solid = static_cast<const SolidColorBrush&>(brush);
         fillRect(rect, solid.color());
+    } else if (brush.type() == BrushType::LinearGradient) {
+        auto& grad = static_cast<const LinearGradientBrush&>(brush);
+        if (grad.stops().size() >= 2) {
+            fillRectGradient(rect, grad.stops().front().color, grad.stops().back().color);
+        }
     }
-    // TODO: Handle gradient brushes
+}
+
+void RenderContext::fillRectGradient(Rectf rect, Color topColor, Color bottomColor) {
+    addRectGradient(rect, topColor, bottomColor);
 }
 
 void RenderContext::strokeRect(Rectf rect, Color color, f32 thickness) {
@@ -10550,7 +10771,116 @@ void RenderContext::fillRoundedRect(Rectf rect, f32 cornerRadius, const Brush& b
     if (brush.type() == BrushType::Solid) {
         auto& solid = static_cast<const SolidColorBrush&>(brush);
         fillRoundedRect(rect, cornerRadius, solid.color());
+    } else if (brush.type() == BrushType::LinearGradient) {
+        auto& grad = static_cast<const LinearGradientBrush&>(brush);
+        if (grad.stops().size() >= 2) {
+            fillRoundedRectGradient(rect, cornerRadius, grad.stops().front().color, grad.stops().back().color);
+        }
     }
+}
+
+void RenderContext::fillRoundedRectGradient(Rectf rect, f32 cornerRadius, Color topColor, Color bottomColor) {
+    addRoundedRectGradient(rect, cornerRadius, topColor, bottomColor);
+}
+
+void RenderContext::drawDropShadow(Rectf rect, f32 cornerRadius, Color shadowColor,
+                                    f32 blurRadius, f32 offsetX, f32 offsetY) {
+    addDropShadow(rect, cornerRadius, shadowColor, blurRadius, offsetX, offsetY);
+}
+
+void RenderContext::addDropShadow(Rectf rect, f32 cornerRadius, Color sc,
+                                   f32 blur, f32 ox, f32 oy) {
+    f32 innerCr = std::min(cornerRadius, std::min(rect.width, rect.height) / 2);
+    Rectf innerRect = {rect.x + ox, rect.y + oy, rect.width, rect.height};
+    u32 cInner = packColor(sc, m_currentState.opacity);
+    
+    // Hard shadow (blur == 0): just a solid filled rounded rect at the offset
+    if (blur <= 0) {
+        fillRoundedRect(innerRect, innerCr, sc);
+        return;
+    }
+    
+    // Soft shadow: solid body + fade-out ring
+    f32 outerCr = innerCr + blur;
+    Rectf outerRect = {innerRect.x - blur, innerRect.y - blur,
+                       innerRect.width + blur * 2, innerRect.height + blur * 2};
+    
+    Color outerColor(sc.r, sc.g, sc.b, 0.0f);
+    u32 cOuter = packColor(outerColor, m_currentState.opacity);
+    
+    const i32 segs = 8;
+    
+    auto buildContour = [&](Rectf r, f32 cr) -> std::vector<Point2f> {
+        std::vector<Point2f> pts;
+        Point2f corners[4] = {
+            {r.x + cr, r.y + cr},
+            {r.x + r.width - cr, r.y + cr},
+            {r.x + r.width - cr, r.y + r.height - cr},
+            {r.x + cr, r.y + r.height - cr}
+        };
+        f32 startAngles[4] = {PI, PI * 1.5f, 0.0f, PI * 0.5f};
+        for (i32 corner = 0; corner < 4; ++corner) {
+            for (i32 i = 0; i <= segs; ++i) {
+                f32 angle = startAngles[corner] + (PI * 0.5f) * static_cast<f32>(i) / static_cast<f32>(segs);
+                pts.push_back({corners[corner].x + cr * std::cos(angle),
+                               corners[corner].y + cr * std::sin(angle)});
+            }
+        }
+        return pts;
+    };
+    
+    auto innerPts = buildContour(innerRect, innerCr);
+    auto outerPts = buildContour(outerRect, outerCr);
+    u32 n = static_cast<u32>(innerPts.size());
+    
+    // Vertex layout:
+    //   [0]        = center of inner rect (for solid fill fan)
+    //   [1..n]     = inner contour (shadow color)
+    //   [n+1..2n]  = outer contour (alpha = 0)
+    std::vector<Vertex> verts;
+    verts.reserve(1 + n * 2);
+    
+    // Center vertex for the solid fill
+    Point2f center = transformPoint({innerRect.x + innerRect.width * 0.5f,
+                                      innerRect.y + innerRect.height * 0.5f});
+    verts.push_back({center.x, center.y, 0.5f, 0.5f, cInner});
+    
+    // Inner contour vertices
+    for (u32 i = 0; i < n; ++i) {
+        Point2f p = transformPoint(innerPts[i]);
+        verts.push_back({p.x, p.y, 0.5f, 0.5f, cInner});
+    }
+    // Outer contour vertices
+    for (u32 i = 0; i < n; ++i) {
+        Point2f p = transformPoint(outerPts[i]);
+        verts.push_back({p.x, p.y, 0.5f, 0.5f, cOuter});
+    }
+    
+    std::vector<u32> inds;
+    inds.reserve(n * 3 + n * 6);
+    
+    // Part 1: Triangle fan — solid shadow body
+    for (u32 i = 0; i < n; ++i) {
+        u32 next = (i + 1) % n;
+        inds.push_back(0);           // center
+        inds.push_back(1 + i);       // inner current
+        inds.push_back(1 + next);    // inner next
+    }
+    
+    // Part 2: Quad-strip ring — fade halo
+    for (u32 i = 0; i < n; ++i) {
+        u32 next = (i + 1) % n;
+        u32 ii = 1 + i;             // inner current
+        u32 oi = 1 + n + i;         // outer current
+        u32 in_ = 1 + next;         // inner next
+        u32 on_ = 1 + n + next;     // outer next
+        inds.push_back(ii); inds.push_back(oi); inds.push_back(in_);
+        inds.push_back(oi); inds.push_back(on_); inds.push_back(in_);
+    }
+    
+    u32 vertOffset = addVertices(verts.data(), static_cast<u32>(verts.size()));
+    addIndices(inds.data(), static_cast<u32>(inds.size()), vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
 }
 
 void RenderContext::fillRoundedRect(Rectf rect, f32 topLeft, f32 topRight, f32 bottomRight, f32 bottomLeft, const Brush& brush) {
@@ -10560,14 +10890,73 @@ void RenderContext::fillRoundedRect(Rectf rect, f32 topLeft, f32 topRight, f32 b
 }
 
 void RenderContext::strokeRoundedRect(Rectf rect, f32 cornerRadius, Color color, f32 thickness) {
-    // TODO: Proper stroke implementation
-    // For now, draw as filled rect outline
-    Rectf outer = rect;
-    Rectf inner = {rect.x + thickness, rect.y + thickness, 
-                   rect.width - 2 * thickness, rect.height - 2 * thickness};
-    addRoundedRect(outer, cornerRadius, color);
-    // Would need to subtract inner rect for proper stroke
-    (void)inner;
+    cornerRadius = std::min(cornerRadius, std::min(rect.width, rect.height) / 2);
+    
+    if (cornerRadius <= 0) {
+        strokeRect(rect, color, thickness);
+        return;
+    }
+    
+    const i32 cornerSegments = 8;
+    u32 c = packColor(color, m_currentState.opacity);
+    f32 t = thickness;
+    f32 innerRadius = std::max(cornerRadius - t, 0.0f);
+    
+    // Outer corner centers
+    Point2f outerCorners[4] = {
+        {rect.x + cornerRadius, rect.y + cornerRadius},
+        {rect.x + rect.width - cornerRadius, rect.y + cornerRadius},
+        {rect.x + rect.width - cornerRadius, rect.y + rect.height - cornerRadius},
+        {rect.x + cornerRadius, rect.y + rect.height - cornerRadius}
+    };
+    
+    // Inner corner centers (inset by thickness)
+    Point2f innerCorners[4] = {
+        {rect.x + t + innerRadius - (innerRadius > 0 ? 0 : 0), rect.y + t + innerRadius - (innerRadius > 0 ? 0 : 0)},
+        {rect.x + rect.width - t - innerRadius, rect.y + t + innerRadius},
+        {rect.x + rect.width - t - innerRadius, rect.y + rect.height - t - innerRadius},
+        {rect.x + t + innerRadius, rect.y + rect.height - t - innerRadius}
+    };
+    // Simplify: inner corners track outer corners
+    for (int i = 0; i < 4; i++) innerCorners[i] = outerCorners[i];
+    
+    f32 startAngles[4] = {PI, PI * 1.5f, 0, PI * 0.5f};
+    
+    // Generate outer and inner ring vertices
+    std::vector<Vertex> verts;
+    for (i32 corner = 0; corner < 4; ++corner) {
+        for (i32 i = 0; i <= cornerSegments; ++i) {
+            f32 angle = startAngles[corner] + (PI / 2) * i / cornerSegments;
+            f32 cosA = std::cos(angle);
+            f32 sinA = std::sin(angle);
+            
+            // Outer vertex
+            Point2f op = transformPoint({outerCorners[corner].x + cornerRadius * cosA,
+                                         outerCorners[corner].y + cornerRadius * sinA});
+            verts.push_back({op.x, op.y, 0.5f, 0.5f, c});
+            
+            // Inner vertex
+            Point2f ip = transformPoint({innerCorners[corner].x + innerRadius * cosA,
+                                         innerCorners[corner].y + innerRadius * sinA});
+            verts.push_back({ip.x, ip.y, 0.5f, 0.5f, c});
+        }
+    }
+    
+    u32 vertOffset = addVertices(verts.data(), static_cast<u32>(verts.size()));
+    
+    // Build quad strip indices (outer[i], inner[i], outer[i+1], inner[i+1])
+    u32 numPairs = static_cast<u32>(verts.size() / 2);
+    std::vector<u32> inds;
+    for (u32 i = 0; i < numPairs; ++i) {
+        u32 next = (i + 1) % numPairs;
+        u32 o0 = i * 2, i0 = i * 2 + 1;
+        u32 o1 = next * 2, i1 = next * 2 + 1;
+        inds.push_back(o0); inds.push_back(i0); inds.push_back(o1);
+        inds.push_back(i0); inds.push_back(i1); inds.push_back(o1);
+    }
+    
+    addIndices(inds.data(), static_cast<u32>(inds.size()), vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
 }
 
 void RenderContext::strokeRoundedRect(Rectf rect, f32 cornerRadius, const Pen& pen) {
@@ -10830,6 +11219,108 @@ void RenderContext::drawText(FontFace* face, const std::string& text, Point2f po
         addDrawCommand(atlasTexture ? DrawCommandType::DrawTexturedTriangles : DrawCommandType::DrawTriangles,
                        static_cast<u32>(inds.size()), atlasTexture);
     }
+}
+
+void RenderContext::drawTextMultiline(FontFace* face, const std::string& text, Point2f position, Color color,
+                                      f32 maxWidth, TextAlignment alignment) {
+    if (!face || text.empty()) return;
+    
+    // Ensure atlas texture is uploaded
+    if (face->needsUpload() && face->atlasBitmap() && face->atlasWidth() > 0) {
+        auto texture = m_backend.createAlphaTexture(
+            static_cast<u32>(face->atlasWidth()),
+            static_cast<u32>(face->atlasHeight()),
+            face->atlasBitmap()
+        );
+        if (texture) {
+            const_cast<FontFace*>(face)->m_atlas = std::move(texture);
+            const_cast<FontFace*>(face)->markUploaded();
+        }
+    }
+    
+    Texture* atlasTexture = face->atlasTexture();
+    u32 packedColor = packColor(color, m_currentState.opacity);
+    
+    // Use TextShaper for word wrapping + alignment
+    TextShaper shaper;
+    auto lines = shaper.shapeMultiline(face, text, maxWidth, alignment);
+    
+    std::vector<Vertex> verts;
+    std::vector<u32> inds;
+    verts.reserve(text.length() * 4);
+    inds.reserve(text.length() * 6);
+    
+    f32 lineY = 0;
+    for (const auto& line : lines) {
+        for (const auto& sg : line.glyphs) {
+            const Glyph* g = sg.glyph;
+            if (!g || g->width <= 0 || g->height <= 0) continue;
+            
+            Point2f glyphPos = transformPoint({
+                position.x + sg.x,
+                position.y + lineY - g->bearingY
+            });
+            
+            u32 baseIndex = static_cast<u32>(verts.size());
+            
+            Vertex tl, tr, bl, br;
+            tl.x = glyphPos.x;              tl.y = glyphPos.y;
+            tl.u = g->u0;                   tl.v = g->v0;
+            tl.color = packedColor;
+            
+            tr.x = glyphPos.x + g->width;   tr.y = glyphPos.y;
+            tr.u = g->u1;                   tr.v = g->v0;
+            tr.color = packedColor;
+            
+            bl.x = glyphPos.x;              bl.y = glyphPos.y + g->height;
+            bl.u = g->u0;                   bl.v = g->v1;
+            bl.color = packedColor;
+            
+            br.x = glyphPos.x + g->width;   br.y = glyphPos.y + g->height;
+            br.u = g->u1;                   br.v = g->v1;
+            br.color = packedColor;
+            
+            verts.push_back(tl);
+            verts.push_back(tr);
+            verts.push_back(bl);
+            verts.push_back(br);
+            
+            inds.push_back(baseIndex + 0);
+            inds.push_back(baseIndex + 1);
+            inds.push_back(baseIndex + 2);
+            inds.push_back(baseIndex + 1);
+            inds.push_back(baseIndex + 3);
+            inds.push_back(baseIndex + 2);
+        }
+        lineY += face->lineHeight();
+    }
+    
+    if (!verts.empty() && !inds.empty()) {
+        u32 vertOffset = addVertices(verts.data(), static_cast<u32>(verts.size()));
+        addIndices(inds.data(), static_cast<u32>(inds.size()), vertOffset);
+        addDrawCommand(atlasTexture ? DrawCommandType::DrawTexturedTriangles : DrawCommandType::DrawTriangles,
+                       static_cast<u32>(inds.size()), atlasTexture);
+    }
+}
+
+void RenderContext::drawBackdropBlur(Rectf rect, f32 cornerRadius, f32 blurRadius, Color tint) {
+    if (blurRadius <= 0) return;
+    
+    // Transform rect to screen coordinates
+    Point2f topLeft = transformPoint({rect.x, rect.y});
+    Point2f bottomRight = transformPoint({rect.x + rect.width, rect.y + rect.height});
+    
+    // Flush any pending draw commands before the blur
+    flush();
+    
+    // Emit a backdrop blur command
+    DrawCommand cmd{};
+    cmd.type = DrawCommandType::DrawBackdropBlur;
+    cmd.blurRect = {topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y};
+    cmd.blurRadius = blurRadius;
+    cmd.blurCornerRadius = cornerRadius;
+    cmd.blurTint = tint;
+    m_commands.push_back(cmd);
 }
 
 } // namespace gut
@@ -11117,7 +11608,12 @@ void InputManager::updateHoveredElement() {
     Element* root = m_context.root();
     if (!root) {
         if (m_hoveredElement) {
-            m_hoveredElement->onMouseLeave();
+            // Walk up old chain, leave all ancestors
+            Element* current = m_hoveredElement;
+            while (current) {
+                current->onMouseLeave();
+                current = current->parent();
+            }
             m_hoveredElement = nullptr;
         }
         return;
@@ -11132,13 +11628,38 @@ void InputManager::updateHoveredElement() {
     Element* newHovered = root->hitTest(localPoint);
     
     if (newHovered != m_hoveredElement) {
-        if (m_hoveredElement) {
-            m_hoveredElement->onMouseLeave();
+        // Build ancestor chains (element → parent → grandparent → ...)
+        auto buildChain = [](Element* e) -> std::vector<Element*> {
+            std::vector<Element*> chain;
+            while (e) {
+                chain.push_back(e);
+                e = e->parent();
+            }
+            return chain;
+        };
+        
+        auto contains = [](const std::vector<Element*>& chain, Element* e) {
+            return std::find(chain.begin(), chain.end(), e) != chain.end();
+        };
+        
+        auto oldChain = buildChain(m_hoveredElement);
+        auto newChain = buildChain(newHovered);
+        
+        // Leave old elements that are NOT ancestors of the new hovered element
+        for (Element* e : oldChain) {
+            if (!contains(newChain, e)) {
+                e->onMouseLeave();
+            }
         }
+        
+        // Enter new elements that were NOT ancestors of the old hovered element
+        for (Element* e : newChain) {
+            if (!contains(oldChain, e)) {
+                e->onMouseEnter();
+            }
+        }
+        
         m_hoveredElement = newHovered;
-        if (m_hoveredElement) {
-            m_hoveredElement->onMouseEnter();
-        }
     }
 }
 
@@ -13439,19 +13960,23 @@ void Element::render(RenderContext& ctx) {
     ctx.translate(m_bounds.x, m_bounds.y);
     ctx.setOpacity(ctx.opacity() * opacity());
     
-    // Clip to bounds
-    ctx.pushClip({0, 0, m_bounds.width, m_bounds.height});
+    // Only clip to bounds when explicitly requested
+    if (clipToBounds()) {
+        ctx.pushClip({0, 0, m_bounds.width, m_bounds.height}, getClipCornerRadius());
+    }
     
     onRender(ctx);
     
-    ctx.popClip();
+    if (clipToBounds()) {
+        ctx.popClip();
+    }
     ctx.restore();
     
     m_renderDirty = false;
 }
 
 Element* Element::hitTest(Point2f point) {
-    if (visibility() != Visibility::Visible) {
+    if (visibility() != Visibility::Visible || !isHitTestVisible()) {
         return nullptr;
     }
     
@@ -13619,7 +14144,7 @@ Element* Panel::childAt(usize index) const {
 }
 
 Element* Panel::hitTest(Point2f point) {
-    if (visibility() != Visibility::Visible) {
+    if (visibility() != Visibility::Visible || !isHitTestVisible()) {
         return nullptr;
     }
     
@@ -13627,9 +14152,17 @@ Element* Panel::hitTest(Point2f point) {
         return nullptr;
     }
     
-    // Check children in reverse order (top to bottom in Z-order)
-    for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
-        const auto& child = *it;
+    // Build sorted order by zIndex descending (highest = topmost, hit-tested first)
+    std::vector<Element*> sorted;
+    sorted.reserve(m_children.size());
+    for (const auto& child : m_children) {
+        sorted.push_back(child.get());
+    }
+    std::stable_sort(sorted.begin(), sorted.end(),
+                     [](const Element* a, const Element* b) {
+                         return a->zIndex() > b->zIndex();
+                     });
+    for (auto* child : sorted) {
         Point2f localPoint = {
             point.x - child->bounds().x,
             point.y - child->bounds().y
@@ -13642,18 +14175,136 @@ Element* Panel::hitTest(Point2f point) {
     return this;
 }
 
+Size2f Panel::measureOverride(Size2f availableSize) {
+    // Basic Panel layout: measure each child with available space,
+    // return the max child desired size (overlay / fill behavior).
+    f32 maxW = 0, maxH = 0;
+    for (auto& child : m_children) {
+        child->measure(availableSize);
+        maxW = std::max(maxW, child->desiredSize().width);
+        maxH = std::max(maxH, child->desiredSize().height);
+    }
+    return {maxW, maxH};
+}
+
+Size2f Panel::arrangeOverride(Size2f finalSize) {
+    // Basic Panel layout: arrange each child filling the panel.
+    for (auto& child : m_children) {
+        child->arrange({0, 0, finalSize.width, finalSize.height});
+    }
+    return finalSize;
+}
+
 void Panel::onRender(RenderContext& ctx) {
+    Rectf rect = {0, 0, bounds().width, bounds().height};
+    f32 cr = cornerRadius();
+    
+    // Draw backdrop blur (frosted glass) if enabled
+    if (backdropBlur() > 0) {
+        ctx.drawBackdropBlur(rect, cr, backdropBlur(), backdropTint());
+    }
+    
+    // Choose background color: pressed > hover > normal
+    Color bg = background();
+    if (isPressed() && pressedBackground().a > 0) {
+        bg = pressedBackground();
+    } else if (isHovered() && hoverBackground().a > 0) {
+        bg = hoverBackground();
+    }
+    
+    // Check for gradient background
+    bool hasGradient = backgroundGradientTop().a > 0 && backgroundGradientBottom().a > 0;
+    
     // Draw background
-    if (background().a > 0) {
-        ctx.fillRect({0, 0, bounds().width, bounds().height}, background());
+    if (hasGradient && !isPressed() && !isHovered()) {
+        // Use gradient (gradient takes precedence over solid bg when not hovered/pressed)
+        if (cr > 0) {
+            ctx.fillRoundedRectGradient(rect, cr, backgroundGradientTop(), backgroundGradientBottom());
+        } else {
+            ctx.fillRectGradient(rect, backgroundGradientTop(), backgroundGradientBottom());
+        }
+    } else if (bg.a > 0) {
+        if (cr > 0) {
+            ctx.fillRoundedRect(rect, cr, bg);
+        } else {
+            ctx.fillRect(rect, bg);
+        }
+    }
+    
+    // Draw border
+    if (borderWidth() > 0 && borderColor().a > 0) {
+        if (cr > 0) {
+            ctx.strokeRoundedRect(rect, cr, borderColor(), borderWidth());
+        } else {
+            ctx.strokeRect(rect, borderColor(), borderWidth());
+        }
     }
     
     // Draw children
     renderChildren(ctx);
 }
 
+void Panel::onMouseEnter() {
+    Element::onMouseEnter();
+}
+
+void Panel::onMouseLeave() {
+    Element::onMouseLeave();
+    setisPressed(false);
+}
+
+bool Panel::onMouseEvent(const MouseEvent& event) {
+    switch (event.type) {
+        case MouseEventType::ButtonDown:
+            if (event.button == MouseButton::Left) {
+                if (pressedBackground().a > 0 || m_onClick) {
+                    setisPressed(true);
+                    return true;
+                }
+            }
+            break;
+        case MouseEventType::ButtonUp:
+            if (event.button == MouseButton::Left && isPressed()) {
+                setisPressed(false);
+                if (m_onClick && containsPoint(event.position)) {
+                    m_onClick();
+                }
+                return true;
+            }
+            break;
+        default:
+            break;
+    }
+    return false;
+}
+
 void Panel::renderChildren(RenderContext& ctx) {
+    // Build sorted order by zIndex (stable: preserve insertion order for equal zIndex)
+    std::vector<Element*> sorted;
+    sorted.reserve(m_children.size());
     for (const auto& child : m_children) {
+        sorted.push_back(child.get());
+    }
+    std::stable_sort(sorted.begin(), sorted.end(),
+                     [](const Element* a, const Element* b) {
+                         return a->zIndex() < b->zIndex();
+                     });
+    for (auto* child : sorted) {
+        // Draw drop shadow for panels that have shadow properties.
+        // Drawn here in the PARENT's coordinate space so it extends
+        // beyond the child's own clip bounds naturally.
+        if (auto* panel = dynamic_cast<Panel*>(child)) {
+            if (panel->visibility() == Visibility::Visible &&
+                panel->shadowColor().a > 0 &&
+                (panel->shadowBlurRadius() > 0 || panel->shadowOffsetX() != 0 || panel->shadowOffsetY() != 0)) {
+                Rectf childBounds = panel->bounds();
+                Rectf shadowRect = {childBounds.x, childBounds.y,
+                                    childBounds.width, childBounds.height};
+                ctx.drawDropShadow(shadowRect, panel->cornerRadius(),
+                                   panel->shadowColor(), panel->shadowBlurRadius(),
+                                   panel->shadowOffsetX(), panel->shadowOffsetY());
+            }
+        }
         child->render(ctx);
     }
 }
@@ -14072,7 +14723,30 @@ Size2f Text::measureOverride(Size2f availableSize) {
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
-                f32 maxW = (textWrapping() != TextWrapping::NoWrap) ? availableSize.width : 0;
+                bool wrapping = textWrapping() != TextWrapping::NoWrap;
+                f32 maxW = wrapping ? availableSize.width : 0;
+                
+                if (wrapping || textAlignment() != TextAlignment::Left) {
+                    // Use shapeMultiline for accurate multi-line measurement
+                    TextShaper shaper;
+                    auto toGlobalAlign = [](TextAlignment a) -> gut::TextAlignment {
+                        switch (a) {
+                            case TextAlignment::Center: return gut::TextAlignment::Center;
+                            case TextAlignment::Right:  return gut::TextAlignment::Right;
+                            case TextAlignment::Justify: return gut::TextAlignment::Justify;
+                            default: return gut::TextAlignment::Left;
+                        }
+                    };
+                    auto lines = shaper.shapeMultiline(face.get(), text(), maxW, toGlobalAlign(textAlignment()));
+                    f32 maxLineW = 0;
+                    for (const auto& line : lines) {
+                        maxLineW = std::max(maxLineW, line.width);
+                    }
+                    f32 h = static_cast<f32>(lines.size()) * face->lineHeight();
+                    if (h <= 0) h = face->lineHeight();
+                    return {maxLineW, h};
+                }
+                
                 return face->measureText(text(), maxW);
             }
         }
@@ -14092,16 +14766,104 @@ Size2f Text::measureOverride(Size2f availableSize) {
     return {textWidth, textHeight};
 }
 
+// Helper: truncate a string with ellipsis so it fits within maxWidth pixels.
+// Returns the original string if it already fits.
+static std::string truncateWithEllipsis(FontFace* face, const std::string& text,
+                                        f32 maxWidth, bool wordBoundary) {
+    if (maxWidth <= 0) return text;
+    
+    // Measure the full text first — fast path
+    f32 fullWidth = face->measureWidth(text);
+    if (fullWidth <= maxWidth) return text;
+    
+    // Measure the ellipsis character
+    static const std::string ellipsis = "\xE2\x80\xA6"; // UTF-8 "…" (U+2026)
+    f32 ellipsisWidth = 0;
+    {
+        const Glyph* eg = face->glyph(0x2026); // U+2026 HORIZONTAL ELLIPSIS
+        if (eg) {
+            ellipsisWidth = eg->advance;
+        } else {
+            // Fallback: use three dots
+            const Glyph* dotG = face->glyph('.');
+            ellipsisWidth = dotG ? dotG->advance * 3 : 0;
+        }
+    }
+    
+    f32 budget = maxWidth - ellipsisWidth;
+    if (budget <= 0) return ellipsis;
+    
+    // Walk glyph by glyph to find the cut point
+    f32 w = 0;
+    size_t cutAt = 0;
+    size_t lastWordBreak = 0;
+    u32 prevCodepoint = 0;
+    
+    for (size_t i = 0; i < text.size(); ++i) {
+        u32 cp = static_cast<u32>(static_cast<unsigned char>(text[i]));
+        const Glyph* g = face->glyph(cp);
+        f32 advance = g ? g->advance : 0;
+        if (prevCodepoint != 0 && g) {
+            advance += face->kerning(prevCodepoint, cp);
+        }
+        if (w + advance > budget) break;
+        w += advance;
+        cutAt = i + 1;
+        if (text[i] == ' ' || text[i] == '\t' || text[i] == '-') {
+            lastWordBreak = cutAt;
+        }
+        prevCodepoint = cp;
+    }
+    
+    if (wordBoundary && lastWordBreak > 0) {
+        cutAt = lastWordBreak;
+    }
+    
+    // Trim trailing spaces before ellipsis
+    while (cutAt > 0 && text[cutAt - 1] == ' ') --cutAt;
+    
+    // Check if we have the Unicode ellipsis glyph
+    const Glyph* eg = face->glyph(0x2026);
+    std::string suffix = eg ? ellipsis : "...";
+    
+    return text.substr(0, cutAt) + suffix;
+}
+
 void Text::onRender(RenderContext& ctx) {
     if (context()) {
         Font* font = context()->defaultFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
-                // Draw at baseline: offset Y by ascender
                 f32 x = padding().left;
                 f32 y = padding().top + face->ascender();
-                ctx.drawText(face.get(), text(), {x, y}, foreground());
+                f32 maxW = bounds().width - padding().horizontalSum();
+                
+                bool wrapping = textWrapping() != TextWrapping::NoWrap;
+                bool aligned = textAlignment() != TextAlignment::Left;
+                bool trimming = textTrimming() != TextTrimming::None;
+                
+                // Determine render text — apply ellipsis truncation for single-line
+                std::string renderText = text();
+                if (trimming && !wrapping && maxW > 0) {
+                    bool wordBreak = (textTrimming() == TextTrimming::WordEllipsis);
+                    renderText = truncateWithEllipsis(face.get(), renderText, maxW, wordBreak);
+                }
+                
+                if (wrapping || aligned) {
+                    auto toGlobalAlign = [](TextAlignment a) -> gut::TextAlignment {
+                        switch (a) {
+                            case TextAlignment::Center: return gut::TextAlignment::Center;
+                            case TextAlignment::Right:  return gut::TextAlignment::Right;
+                            case TextAlignment::Justify: return gut::TextAlignment::Justify;
+                            default: return gut::TextAlignment::Left;
+                        }
+                    };
+                    ctx.drawTextMultiline(face.get(), renderText, {x, y}, foreground(),
+                                          maxW, toGlobalAlign(textAlignment()));
+                } else {
+                    ctx.drawText(face.get(), renderText, {x, y}, foreground());
+                }
                 return;
             }
         }
