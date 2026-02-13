@@ -768,9 +768,12 @@ void MetalRenderBackend::executeBackdropBlur(
     [m_renderEncoder setVertexBuffer:m_vertexBuffer offset:0 atIndex:0];
     [m_renderEncoder setVertexBytes:&projection length:sizeof(projection) atIndex:1];
     [m_renderEncoder setFragmentBytes:&m_clipUniforms length:sizeof(m_clipUniforms) atIndex:0];
-    if (m_hasCustomScissor) {
-        [m_renderEncoder setScissorRect:m_currentScissor];
-    }
+    // Always reset scissor to full viewport for the composite quad draw
+    MTLScissorRect fullScissor = {0, 0, m_frameWidth, m_frameHeight};
+    [m_renderEncoder setScissorRect:fullScissor];
+    // Disable clip for composite draw
+    ClipUniforms noClip = {{0, 0, 0, 0}, 0, 0, {0, 0}};
+    [m_renderEncoder setFragmentBytes:&noClip length:sizeof(noClip) atIndex:0];
     
     // 6. Draw a quad with the blurred texture using the composite shader
     //    Build a quad that covers the blur rect area in screen space
@@ -779,9 +782,6 @@ void MetalRenderBackend::executeBackdropBlur(
     f32 rw = cmd.blurRect.width * m_devicePixelRatio;
     f32 rh = cmd.blurRect.height * m_devicePixelRatio;
     
-    NSLog(@"[BLUR DBG] blurRect logical: (%.1f, %.1f, %.1f, %.1f)", cmd.blurRect.x, cmd.blurRect.y, cmd.blurRect.width, cmd.blurRect.height);
-    NSLog(@"[BLUR DBG] physical rect: (%.1f, %.1f, %.1f, %.1f) dpr=%.1f", rx, ry, rw, rh, m_devicePixelRatio);
-    NSLog(@"[BLUR DBG] blurTexSize: %u x %u  frameSize: %u x %u", m_blurTexWidth, m_blurTexHeight, m_frameWidth, m_frameHeight);
     
     // UV coordinates: map the blur rect in screen space to texture UV
     f32 u0 = rx / m_blurTexWidth;
@@ -805,11 +805,6 @@ void MetalRenderBackend::executeBackdropBlur(
     };
     u32 quadIdx[6] = {0, 1, 2, 0, 2, 3};
     
-    NSLog(@"[BLUR DBG] quad v0=(%.1f, %.1f uv=%.3f,%.3f)", quadVerts[0].x, quadVerts[0].y, quadVerts[0].u, quadVerts[0].v);
-    NSLog(@"[BLUR DBG] quad v1=(%.1f, %.1f uv=%.3f,%.3f)", quadVerts[1].x, quadVerts[1].y, quadVerts[1].u, quadVerts[1].v);
-    NSLog(@"[BLUR DBG] quad v2=(%.1f, %.1f uv=%.3f,%.3f)", quadVerts[2].x, quadVerts[2].y, quadVerts[2].u, quadVerts[2].v);
-    NSLog(@"[BLUR DBG] quad v3=(%.1f, %.1f uv=%.3f,%.3f)", quadVerts[3].x, quadVerts[3].y, quadVerts[3].u, quadVerts[3].v);
-    NSLog(@"[BLUR DBG] projection: [%.3f, %.3f, %.3f, %.3f]", projection.columns[0][0], projection.columns[1][1], projection.columns[3][0], projection.columns[3][1]);
     
     id<MTLBuffer> quadVB = [m_device newBufferWithBytes:quadVerts
                                                  length:sizeof(quadVerts)
@@ -842,8 +837,13 @@ void MetalRenderBackend::executeBackdropBlur(
                                indexBuffer:quadIB
                          indexBufferOffset:0];
     
-    // 7. Restore the original vertex buffer for subsequent draws
+    // 7. Restore the original vertex buffer and clip state for subsequent draws
     [m_renderEncoder setVertexBuffer:m_vertexBuffer offset:0 atIndex:0];
+    [m_renderEncoder setVertexBytes:&projection length:sizeof(projection) atIndex:1];
+    [m_renderEncoder setFragmentBytes:&m_clipUniforms length:sizeof(m_clipUniforms) atIndex:0];
+    if (m_hasCustomScissor) {
+        [m_renderEncoder setScissorRect:m_currentScissor];
+    }
 }
 
 void MetalRenderBackend::beginFrame(u32 width, u32 height, f32 devicePixelRatio) {
@@ -861,6 +861,10 @@ void MetalRenderBackend::beginFrame(u32 width, u32 height, f32 devicePixelRatio)
     m_clipUniforms = {{0, 0, 0, 0}, 0, 0, {0, 0}};
     m_currentScissor = {0, 0, m_frameWidth, m_frameHeight};
     m_hasCustomScissor = false;
+    
+    // Reset buffer offsets for the new frame
+    m_vertexBufferOffset = 0;
+    m_indexBufferOffset = 0;
     
     m_commandBuffer = [m_commandQueue commandBuffer];
     
@@ -932,16 +936,27 @@ void MetalRenderBackend::render(
     if (!m_renderEncoder || commands.empty()) return;
     
     // Upload vertex data - scale from logical to physical pixels
+    // Append at current offset to avoid overwriting previous render batch data
+    size_t vertexByteOffset = m_vertexBufferOffset * sizeof(Vertex);
+    size_t indexByteOffset = m_indexBufferOffset * sizeof(u32);
+    
     if (!vertices.empty()) {
         std::vector<Vertex> scaledVertices(vertices.begin(), vertices.end());
         for (auto& v : scaledVertices) {
             v.x *= m_devicePixelRatio;
             v.y *= m_devicePixelRatio;
         }
-        memcpy([m_vertexBuffer contents], scaledVertices.data(), scaledVertices.size() * sizeof(Vertex));
+        memcpy((u8*)[m_vertexBuffer contents] + vertexByteOffset,
+               scaledVertices.data(), scaledVertices.size() * sizeof(Vertex));
     }
     if (!indices.empty()) {
-        memcpy([m_indexBuffer contents], indices.data(), indices.size() * sizeof(u32));
+        // Remap indices to account for vertex offset
+        std::vector<u32> remappedIndices(indices.begin(), indices.end());
+        for (auto& idx : remappedIndices) {
+            idx += (u32)m_vertexBufferOffset;
+        }
+        memcpy((u8*)[m_indexBuffer contents] + indexByteOffset,
+               remappedIndices.data(), remappedIndices.size() * sizeof(u32));
     }
     
     // Create orthographic projection matrix
@@ -1005,7 +1020,7 @@ void MetalRenderBackend::render(
                                         indexCount:cmd.indexCount
                                          indexType:MTLIndexTypeUInt32
                                        indexBuffer:m_indexBuffer
-                                 indexBufferOffset:cmd.indexOffset * sizeof(u32)];
+                                 indexBufferOffset:(m_indexBufferOffset + cmd.indexOffset) * sizeof(u32)];
         }
         else if (cmd.type == DrawCommandType::DrawTexturedTriangles) {
             [m_renderEncoder setRenderPipelineState:m_texturePipelineState];
@@ -1017,12 +1032,16 @@ void MetalRenderBackend::render(
                                         indexCount:cmd.indexCount
                                          indexType:MTLIndexTypeUInt32
                                        indexBuffer:m_indexBuffer
-                                 indexBufferOffset:cmd.indexOffset * sizeof(u32)];
+                                 indexBufferOffset:(m_indexBufferOffset + cmd.indexOffset) * sizeof(u32)];
         }
         else if (cmd.type == DrawCommandType::DrawBackdropBlur) {
             executeBackdropBlur(cmd, projection);
         }
     }
+    
+    // Advance buffer offsets so the next render() call appends after this batch
+    m_vertexBufferOffset += vertices.size();
+    m_indexBufferOffset += indices.size();
 }
 
 Ref<Texture> MetalRenderBackend::createTexture(u32 width, u32 height, const u8* pixels) {

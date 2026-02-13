@@ -102,6 +102,11 @@ private:
     id<MTLBuffer> m_vertexBuffer;
     id<MTLBuffer> m_indexBuffer;
     
+    // Accumulated offsets within the vertex/index buffers for current frame.
+    // Each render() call appends data at these offsets instead of overwriting from 0.
+    size_t m_vertexBufferOffset{0};
+    size_t m_indexBufferOffset{0};
+    
     id<MTLCommandBuffer> m_commandBuffer;
     id<MTLRenderCommandEncoder> m_renderEncoder;
     id<CAMetalDrawable> m_drawable;

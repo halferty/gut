@@ -2063,8 +2063,12 @@
     // (The 3D spinning cube behind the UI serves as backdrop content)
     // =====================================================================
     {
-        f32 bx = 530.0f;
-        f32 by = 660.0f;
+        f32 panelW = 100.0f;
+        f32 panelH = 50.0f;
+        f32 gap = 10.0f;
+        f32 totalW = 3 * panelW + 2 * gap;
+        f32 bx = (1024.0f - totalW) / 2.0f;
+        f32 by = (766.0f - panelH) / 2.0f - 14.0f;
         
         auto title = make<Text>("Backdrop Blur (Frosted Glass)", 10.0f);
         title->setforeground(c(220, 220, 240));
@@ -2086,11 +2090,8 @@
             {24.0f, "blur=24", c(200, 220, 255, 45)},
         };
         
-        f32 panelW = 140.0f;
-        f32 panelH = 70.0f;
-        f32 gap = 12.0f;
         f32 px = bx;
-        f32 py = by + 18.0f;
+        f32 py = by + 16.0f;
         
         for (int i = 0; i < 3; i++) {
             auto glass = make<Panel>();
