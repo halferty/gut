@@ -662,6 +662,103 @@ static void BuildUI() {
             page->addChild(card);
         }
 
+        // Inset Shadows card
+        {
+            auto card = makeCard(420.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{20, 20, 20, 20});
+            inner->addChild(makeHeading("Inset Shadows"));
+            inner->addChild(makeLabel("Inner shadows via Panel insetShadow properties"));
+
+            auto row = makeRef<StackPanel>(Orientation::Horizontal);
+            row->setspacing(14.0f);
+            row->setmargin(Thickness{0, 12, 0, 0});
+
+            // 1) Soft inset — card-like depression
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(100.0f); box->setheight(100.0f);
+                box->setcornerRadius(8.0f);
+                box->setbackground(c(50, 55, 75));
+                box->setinsetShadowColor(c(0, 0, 0, 120));
+                box->setinsetShadowBlurRadius(12.0f);
+                col->addChild(box);
+                col->addChild(makeLabel("Soft inset", 10.0f));
+                row->addChild(col);
+            }
+
+            // 2) Offset inset — light from top-left
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(100.0f); box->setheight(100.0f);
+                box->setcornerRadius(8.0f);
+                box->setbackground(c(50, 55, 75));
+                box->setinsetShadowColor(c(0, 0, 0, 160));
+                box->setinsetShadowBlurRadius(10.0f);
+                box->setinsetShadowOffsetX(4.0f);
+                box->setinsetShadowOffsetY(4.0f);
+                col->addChild(box);
+                col->addChild(makeLabel("Offset", 10.0f));
+                row->addChild(col);
+            }
+
+            // 3) Rounded — pill with inset
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(100.0f); box->setheight(100.0f);
+                box->setcornerRadius(50.0f);
+                box->setbackground(c(60, 100, 180));
+                box->setinsetShadowColor(c(0, 0, 0, 180));
+                box->setinsetShadowBlurRadius(16.0f);
+                col->addChild(box);
+                col->addChild(makeLabel("Rounded", 10.0f));
+                row->addChild(col);
+            }
+
+            inner->addChild(row);
+
+            // Second row
+            auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
+            row2->setspacing(14.0f);
+            row2->setmargin(Thickness{0, 14, 0, 0});
+
+            // 4) Coloured inset
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(200.0f); box->setheight(60.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(40, 45, 65));
+                box->setinsetShadowColor(c(100, 40, 200, 140));
+                box->setinsetShadowBlurRadius(14.0f);
+                col->addChild(box);
+                col->addChild(makeLabel("Colour tint", 10.0f));
+                row2->addChild(col);
+            }
+
+            // 5) Tight inset — small blur
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(100.0f); box->setheight(60.0f);
+                box->setcornerRadius(4.0f);
+                box->setbackground(c(50, 55, 75));
+                box->setinsetShadowColor(c(0, 0, 0, 200));
+                box->setinsetShadowBlurRadius(4.0f);
+                col->addChild(box);
+                col->addChild(makeLabel("Tight", 10.0f));
+                row2->addChild(col);
+            }
+
+            inner->addChild(row2);
+
+            card->addChild(inner);
+            page->addChild(card);
+        }
+
         tabs->addTab("Images", page);
     }
 

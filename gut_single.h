@@ -1913,6 +1913,23 @@ public:
                         f32 blurRadius, f32 offsetX = 0, f32 offsetY = 4);
     
     /**
+     * @brief Draw an inset (inner) shadow inside a rounded rect.
+     *
+     * Builds a quad-strip ring: outer contour at the rect boundary (full
+     * shadow colour), inner contour inset by blurRadius (alpha = 0).
+     * The result is a soft shadow that fades toward the centre.
+     *
+     * @param rect          The element rectangle.
+     * @param cornerRadius  Corner rounding of the element.
+     * @param shadowColor   Shadow colour (typically semi-transparent black).
+     * @param blurRadius    How far the shadow fades inward.
+     * @param offsetX       Horizontal offset (positive = shadow shifts right → left edge darker).
+     * @param offsetY       Vertical offset (positive = shadow shifts down → top edge darker).
+     */
+    void drawInsetShadow(Rectf rect, f32 cornerRadius, Color shadowColor,
+                         f32 blurRadius, f32 offsetX = 0, f32 offsetY = 0);
+    
+    /**
      * @brief Fill an ellipse.
      */
     void fillEllipse(Point2f center, f32 radiusX, f32 radiusY, Color color);
@@ -2076,6 +2093,8 @@ private:
     void addRoundedRectRadialGradient(Rectf rect, f32 radius, const RadialGradientBrush& brush);
     void addEllipseRadialGradient(Point2f center, f32 rx, f32 ry, const RadialGradientBrush& brush, i32 segments = 32);
     void addDropShadow(Rectf rect, f32 cornerRadius, Color shadowColor,
+                       f32 blurRadius, f32 offsetX, f32 offsetY);
+    void addInsetShadow(Rectf rect, f32 cornerRadius, Color shadowColor,
                        f32 blurRadius, f32 offsetX, f32 offsetY);
     void addEllipse(Point2f center, f32 rx, f32 ry, Color color, i32 segments = 32);
     void addLine(Point2f p1, Point2f p2, Color color, f32 thickness);
@@ -4059,6 +4078,15 @@ public:
     GUT_PROPERTY(f32, shadowOffsetX, 0.0f)
     GUT_PROPERTY(f32, shadowOffsetY, 4.0f)
     GUT_PROPERTY(f32, shadowBlurRadius, 8.0f)
+    
+    // -------------------------------------------------------------------------
+    // Inset Shadow (inner shadow)
+    // -------------------------------------------------------------------------
+    
+    GUT_PROPERTY(Color, insetShadowColor, Color::transparent())
+    GUT_PROPERTY(f32, insetShadowOffsetX, 0.0f)
+    GUT_PROPERTY(f32, insetShadowOffsetY, 0.0f)
+    GUT_PROPERTY(f32, insetShadowBlurRadius, 8.0f)
     
     // -------------------------------------------------------------------------
     // Backdrop Blur (frosted glass)
@@ -12693,6 +12721,132 @@ void RenderContext::addDropShadow(Rectf rect, f32 cornerRadius, Color sc,
     addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
 }
 
+void RenderContext::drawInsetShadow(Rectf rect, f32 cornerRadius, Color shadowColor,
+                                     f32 blurRadius, f32 offsetX, f32 offsetY) {
+    addInsetShadow(rect, cornerRadius, shadowColor, blurRadius, offsetX, offsetY);
+}
+
+void RenderContext::addInsetShadow(Rectf rect, f32 cornerRadius, Color sc,
+                                    f32 blur, f32 ox, f32 oy) {
+    f32 cr = std::min(cornerRadius, std::min(rect.width, rect.height) / 2);
+
+    // The outer contour sits on the rect boundary (shifted by offset).
+    // The inner contour is inset by the blur radius.
+    // Shadow colour at the outer contour fades to alpha=0 at the inner contour.
+    // This creates a soft glow around the inside edge of the rect.
+
+    if (blur <= 0 && ox == 0 && oy == 0) return;  // nothing to draw
+    f32 effectiveBlur = std::max(blur, 0.5f);
+
+    // Outer contour = the element boundary (shifted by -offset so the shadow
+    // "comes from" that direction).  We actually shift the outer rect and
+    // clamp with the inner to get the asymmetric offset effect.
+    Rectf outerRect = {rect.x + ox, rect.y + oy, rect.width, rect.height};
+    f32 outerCr = cr;
+
+    // Inner contour = outer shrunk inward by blur
+    Rectf innerRect = {outerRect.x + effectiveBlur, outerRect.y + effectiveBlur,
+                       outerRect.width - effectiveBlur * 2, outerRect.height - effectiveBlur * 2};
+    f32 innerCr = std::max(0.0f, outerCr - effectiveBlur);
+
+    // If inner rect has degenerated, clamp to a very thin rect
+    if (innerRect.width < 0) { innerRect.x = outerRect.x + outerRect.width * 0.5f; innerRect.width = 0; }
+    if (innerRect.height < 0) { innerRect.y = outerRect.y + outerRect.height * 0.5f; innerRect.height = 0; }
+
+    const i32 segs = 8;
+    u32 cShadow = packColor(sc, m_currentState.opacity);
+    Color fadeColor(sc.r, sc.g, sc.b, 0.0f);
+    u32 cFade = packColor(fadeColor, m_currentState.opacity);
+
+    auto buildContour = [&](Rectf r, f32 rad) -> std::vector<Point2f> {
+        std::vector<Point2f> pts;
+        if (rad <= 0) {
+            // Simple rectangle corners
+            pts.push_back({r.x, r.y});
+            pts.push_back({r.x + r.width, r.y});
+            pts.push_back({r.x + r.width, r.y + r.height});
+            pts.push_back({r.x, r.y + r.height});
+            return pts;
+        }
+        Point2f corners[4] = {
+            {r.x + rad, r.y + rad},
+            {r.x + r.width - rad, r.y + rad},
+            {r.x + r.width - rad, r.y + r.height - rad},
+            {r.x + rad, r.y + r.height - rad}
+        };
+        f32 startAngles[4] = {PI, PI * 1.5f, 0.0f, PI * 0.5f};
+        for (i32 corner = 0; corner < 4; ++corner) {
+            for (i32 i = 0; i <= segs; ++i) {
+                f32 angle = startAngles[corner] + (PI * 0.5f) * static_cast<f32>(i) / static_cast<f32>(segs);
+                pts.push_back({corners[corner].x + rad * std::cos(angle),
+                               corners[corner].y + rad * std::sin(angle)});
+            }
+        }
+        return pts;
+    };
+
+    auto outerPts = buildContour(outerRect, outerCr);
+    auto innerPts = buildContour(innerRect, innerCr);
+
+    // The two contours may have different point counts if one is rounded and
+    // the other degenerated to a rectangle.  Resample the shorter one.
+    // For simplicity, if sizes differ we just use the outer contour and shrink
+    // each point toward the rect centre to build the inner contour.
+    u32 n = static_cast<u32>(outerPts.size());
+    if (innerPts.size() != outerPts.size()) {
+        // Rebuild inner by projecting outer points inward
+        Point2f cen = {outerRect.x + outerRect.width * 0.5f, outerRect.y + outerRect.height * 0.5f};
+        innerPts.resize(n);
+        for (u32 i = 0; i < n; ++i) {
+            f32 dx = outerPts[i].x - cen.x;
+            f32 dy = outerPts[i].y - cen.y;
+            f32 len = std::sqrt(dx * dx + dy * dy);
+            if (len > 0) {
+                f32 shrink = std::min(effectiveBlur, len);
+                innerPts[i] = {outerPts[i].x - dx / len * shrink,
+                               outerPts[i].y - dy / len * shrink};
+            } else {
+                innerPts[i] = outerPts[i];
+            }
+        }
+    }
+
+    // Vertices: outer contour (shadow colour) + inner contour (alpha=0)
+    std::vector<Vertex> verts;
+    verts.reserve(n * 2);
+
+    for (u32 i = 0; i < n; ++i) {
+        Point2f p = transformPoint(outerPts[i]);
+        verts.push_back({p.x, p.y, 0.5f, 0.5f, cShadow});
+    }
+    for (u32 i = 0; i < n; ++i) {
+        Point2f p = transformPoint(innerPts[i]);
+        verts.push_back({p.x, p.y, 0.5f, 0.5f, cFade});
+    }
+
+    // Quad-strip ring: outer[i]–inner[i]–outer[i+1]–inner[i+1]
+    std::vector<u32> inds;
+    inds.reserve(n * 6);
+    for (u32 i = 0; i < n; ++i) {
+        u32 next = (i + 1) % n;
+        u32 oi = i;              // outer current
+        u32 ii = n + i;          // inner current
+        u32 on_ = next;          // outer next
+        u32 in_ = n + next;      // inner next
+        inds.push_back(oi); inds.push_back(ii); inds.push_back(on_);
+        inds.push_back(ii); inds.push_back(in_); inds.push_back(on_);
+    }
+
+    // We need to clip this ring to the element rect so it doesn't bleed outside.
+    pushClip(rect, cr);
+
+    u32 vertOffset = addVertices(verts.data(), static_cast<u32>(verts.size()));
+    addIndices(inds.data(), static_cast<u32>(inds.size()), vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
+
+    popClip();
+}
+
 void RenderContext::fillRoundedRect(Rectf rect, f32 topLeft, f32 topRight, f32 bottomRight, f32 bottomLeft, const Brush& brush) {
     // Simplified: use average radius
     f32 avgRadius = (topLeft + topRight + bottomRight + bottomLeft) / 4;
@@ -16184,6 +16338,13 @@ void Panel::onRender(RenderContext& ctx) {
         } else {
             ctx.fillRect(rect, bg);
         }
+    }
+    
+    // Draw inset shadow (inner shadow)
+    if (insetShadowColor().a > 0 &&
+        (insetShadowBlurRadius() > 0 || insetShadowOffsetX() != 0 || insetShadowOffsetY() != 0)) {
+        ctx.drawInsetShadow(rect, cr, insetShadowColor(), insetShadowBlurRadius(),
+                            insetShadowOffsetX(), insetShadowOffsetY());
     }
     
     // Draw border
