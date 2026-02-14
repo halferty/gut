@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 60 done, 10 partial, 1 missing** out of 67 core features.
+**Score: 61 done, 10 partial, 1 missing** out of 67 core features.
 
 ---
 
@@ -33,7 +33,7 @@
 - [x] Rounded-rect clipping — SDF fragment shader
 - [x] Ellipse — fill + stroke
 - [x] Image / texture — drawImage, Image element, stretch modes
-- [ ] Radial gradients — brush class exists, rendering not wired
+- [x] Radial gradients — RadialGradientBrush with multi-stop support, rect/rounded-rect/ellipse rendering
 - [ ] Inset / inner shadows
 - [ ] Path rendering — Path class fully designed, fill/stroke stubbed (draw bounding rect only)
 - [ ] Polylines — only single line segments, no multi-segment API

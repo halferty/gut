@@ -558,6 +558,110 @@ static void BuildUI() {
             page->addChild(card);
         }
 
+        // Radial Gradients card
+        {
+            auto card = makeCard(420.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{20, 20, 20, 20});
+            inner->addChild(makeHeading("Radial Gradients"));
+            inner->addChild(makeLabel("Per-vertex radial colour via RadialGradientBrush"));
+
+            auto row = makeRef<StackPanel>(Orientation::Horizontal);
+            row->setspacing(14.0f);
+            row->setmargin(Thickness{0, 12, 0, 0});
+
+            // 1) Simple radial — centre-out, white → blue
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(100.0f); box->setheight(100.0f);
+                box->setcornerRadius(8.0f);
+                auto brush = makeRef<RadialGradientBrush>(
+                    Point2f{0.5f, 0.5f}, 0.5f,
+                    std::vector<GradientStop>{{0.0f, c(255,255,255)}, {1.0f, c(40,80,200)}});
+                box->setbackgroundBrush(brush);
+                col->addChild(box);
+                col->addChild(makeLabel("Centre-out", 10.0f));
+                row->addChild(col);
+            }
+
+            // 2) Sunset — 3 stops
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(100.0f); box->setheight(100.0f);
+                box->setcornerRadius(50.0f);
+                auto brush = makeRef<RadialGradientBrush>(
+                    Point2f{0.5f, 0.5f}, 0.5f,
+                    std::vector<GradientStop>{
+                        {0.0f, c(255,220,80)},
+                        {0.5f, c(255,100,40)},
+                        {1.0f, c(80,20,100)}});
+                box->setbackgroundBrush(brush);
+                col->addChild(box);
+                col->addChild(makeLabel("Sunset (3-stop)", 10.0f));
+                row->addChild(col);
+            }
+
+            // 3) Off-centre highlight
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(100.0f); box->setheight(100.0f);
+                box->setcornerRadius(8.0f);
+                auto brush = makeRef<RadialGradientBrush>();
+                brush->setCenter({0.3f, 0.3f});
+                brush->setGradientOrigin({0.3f, 0.3f});
+                brush->setRadiusX(0.6f);
+                brush->setRadiusY(0.6f);
+                brush->setStops({{0.0f, c(255,255,255)}, {0.4f, c(60,180,100)}, {1.0f, c(20,60,30)}});
+                box->setbackgroundBrush(brush);
+                col->addChild(box);
+                col->addChild(makeLabel("Off-centre", 10.0f));
+                row->addChild(col);
+            }
+
+            inner->addChild(row);
+
+            // Second row — rectangular stretch
+            auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
+            row2->setspacing(14.0f);
+            row2->setmargin(Thickness{0, 14, 0, 0});
+
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(200.0f); box->setheight(60.0f);
+                box->setcornerRadius(6.0f);
+                auto brush = makeRef<RadialGradientBrush>(
+                    Point2f{0.5f, 0.5f}, 0.5f,
+                    std::vector<GradientStop>{{0.0f, c(220,60,200)}, {1.0f, c(30,30,60)}});
+                box->setbackgroundBrush(brush);
+                col->addChild(box);
+                col->addChild(makeLabel("Wide rect", 10.0f));
+                row2->addChild(col);
+            }
+
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                auto box = makeRef<Panel>();
+                box->setwidth(60.0f); box->setheight(120.0f);
+                box->setcornerRadius(6.0f);
+                auto brush = makeRef<RadialGradientBrush>(
+                    Point2f{0.5f, 0.5f}, 0.5f,
+                    std::vector<GradientStop>{{0.0f, c(255,200,60)}, {1.0f, c(60,30,10)}});
+                box->setbackgroundBrush(brush);
+                col->addChild(box);
+                col->addChild(makeLabel("Tall rect", 10.0f));
+                row2->addChild(col);
+            }
+
+            inner->addChild(row2);
+
+            card->addChild(inner);
+            page->addChild(card);
+        }
+
         tabs->addTab("Images", page);
     }
 

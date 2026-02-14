@@ -2070,8 +2070,11 @@ private:
     // Helper for common shapes
     void addRect(Rectf rect, Color color, Texture* texture = nullptr, Rectf uvRect = {0, 0, 1, 1});
     void addRectGradient(Rectf rect, Color topColor, Color bottomColor);
+    void addRectRadialGradient(Rectf rect, const RadialGradientBrush& brush);
     void addRoundedRect(Rectf rect, f32 radius, Color color);
     void addRoundedRectGradient(Rectf rect, f32 radius, Color topColor, Color bottomColor);
+    void addRoundedRectRadialGradient(Rectf rect, f32 radius, const RadialGradientBrush& brush);
+    void addEllipseRadialGradient(Point2f center, f32 rx, f32 ry, const RadialGradientBrush& brush, i32 segments = 32);
     void addDropShadow(Rectf rect, f32 cornerRadius, Color shadowColor,
                        f32 blurRadius, f32 offsetX, f32 offsetY);
     void addEllipse(Point2f center, f32 rx, f32 ry, Color color, i32 segments = 32);
@@ -2085,6 +2088,21 @@ private:
             top.b + (bottom.b - top.b) * t,
             top.a + (bottom.a - top.a) * t
         );
+    }
+
+    /// Sample a multi-stop gradient at normalized parameter t ∈ [0,1].
+    Color sampleGradientStops(const std::vector<GradientStop>& stops, f32 t) {
+        if (stops.empty()) return Color(0, 0, 0, 0);
+        if (stops.size() == 1 || t <= stops.front().offset) return stops.front().color;
+        if (t >= stops.back().offset) return stops.back().color;
+        for (usize i = 0; i + 1 < stops.size(); ++i) {
+            if (t >= stops[i].offset && t <= stops[i + 1].offset) {
+                f32 range = stops[i + 1].offset - stops[i].offset;
+                f32 local = (range > 0.0f) ? (t - stops[i].offset) / range : 0.0f;
+                return sampleGradient(stops[i].color, stops[i + 1].color, local);
+            }
+        }
+        return stops.back().color;
     }
     
     RenderBackend& m_backend;
@@ -4025,6 +4043,10 @@ public:
     GUT_PROPERTY(Color, backgroundGradientBottom, Color::transparent())
     GUT_PROPERTY(Color, hoverBackground, Color::transparent())
     GUT_PROPERTY(Color, pressedBackground, Color::transparent())
+
+    /// Optional Brush for the background (takes precedence over solid/gradient colors).
+    Ref<Brush> backgroundBrush() const { return m_backgroundBrush; }
+    void setbackgroundBrush(Ref<Brush> b) { m_backgroundBrush = std::move(b); }
     GUT_PROPERTY(f32, cornerRadius, 0.0f)
     GUT_PROPERTY(Color, borderColor, Color::transparent())
     GUT_PROPERTY(f32, borderWidth, 0.0f)
@@ -4107,6 +4129,7 @@ protected:
     virtual void renderChildren(RenderContext& ctx);
     
     std::vector<Ref<Element>> m_children;
+    Ref<Brush> m_backgroundBrush;
     std::function<void()> m_onClick;
 };
 
@@ -12267,6 +12290,164 @@ void RenderContext::addRoundedRectGradient(Rectf rect, f32 radius, Color topColo
     addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
 }
 
+// ---------------------------------------------------------------------------
+// Radial gradient mesh builders
+// ---------------------------------------------------------------------------
+
+void RenderContext::addRectRadialGradient(Rectf rect, const RadialGradientBrush& brush) {
+    // We subdivide the rect into a grid and assign per-vertex colours from the
+    // radial gradient.  A 16x16 grid is plenty for smooth colour fading.
+    const auto& stops = brush.stops();
+    if (stops.size() < 2) return;
+
+    const i32 gridN = 16;  // cells per axis
+    const i32 vertsPerSide = gridN + 1;
+
+    // Gradient centre & radii are in [0,1] relative coords → map to rect.
+    const f32 cx = rect.x + brush.center().x * rect.width;
+    const f32 cy = rect.y + brush.center().y * rect.height;
+    const f32 rx = brush.radiusX() * rect.width;
+    const f32 ry = brush.radiusY() * rect.height;
+
+    std::vector<Vertex> verts(vertsPerSide * vertsPerSide);
+    for (i32 row = 0; row <= gridN; ++row) {
+        for (i32 col = 0; col <= gridN; ++col) {
+            f32 x = rect.x + rect.width  * col / gridN;
+            f32 y = rect.y + rect.height * row / gridN;
+            f32 dx = (rx > 0) ? (x - cx) / rx : 0;
+            f32 dy = (ry > 0) ? (y - cy) / ry : 0;
+            f32 dist = std::sqrt(dx * dx + dy * dy);
+            dist = std::clamp(dist, 0.0f, 1.0f);
+            Color c = sampleGradientStops(stops, dist);
+            Point2f tp = transformPoint({x, y});
+            verts[row * vertsPerSide + col] = {tp.x, tp.y, 0, 0, packColor(c, m_currentState.opacity)};
+        }
+    }
+
+    std::vector<u32> inds;
+    inds.reserve(gridN * gridN * 6);
+    for (i32 row = 0; row < gridN; ++row) {
+        for (i32 col = 0; col < gridN; ++col) {
+            u32 tl = row * vertsPerSide + col;
+            u32 tr = tl + 1;
+            u32 bl = tl + vertsPerSide;
+            u32 br = bl + 1;
+            inds.push_back(tl); inds.push_back(tr); inds.push_back(br);
+            inds.push_back(tl); inds.push_back(br); inds.push_back(bl);
+        }
+    }
+
+    u32 vertOffset = addVertices(verts.data(), static_cast<u32>(verts.size()));
+    addIndices(inds.data(), static_cast<u32>(inds.size()), vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
+}
+
+void RenderContext::addRoundedRectRadialGradient(Rectf rect, f32 radius, const RadialGradientBrush& brush) {
+    radius = std::min(radius, std::min(rect.width, rect.height) / 2);
+    if (radius <= 0) {
+        addRectRadialGradient(rect, brush);
+        return;
+    }
+
+    const auto& stops = brush.stops();
+    if (stops.size() < 2) return;
+
+    const f32 cx = rect.x + brush.center().x * rect.width;
+    const f32 cy = rect.y + brush.center().y * rect.height;
+    const f32 rx = brush.radiusX() * rect.width;
+    const f32 ry = brush.radiusY() * rect.height;
+
+    auto radialColor = [&](f32 x, f32 y) -> u32 {
+        f32 dx = (rx > 0) ? (x - cx) / rx : 0;
+        f32 dy = (ry > 0) ? (y - cy) / ry : 0;
+        f32 dist = std::clamp(std::sqrt(dx * dx + dy * dy), 0.0f, 1.0f);
+        return packColor(sampleGradientStops(stops, dist), m_currentState.opacity);
+    };
+
+    // Build a triangle-fan rounded rect (center + boundary).
+    constexpr i32 cornerSegs = 8;
+    std::vector<Vertex> verts;
+
+    // Center vertex
+    f32 midX = rect.x + rect.width * 0.5f;
+    f32 midY = rect.y + rect.height * 0.5f;
+    Point2f ct = transformPoint({midX, midY});
+    verts.push_back({ct.x, ct.y, 0.5f, 0.5f, radialColor(midX, midY)});
+
+    Point2f corners[4] = {
+        {rect.x + radius, rect.y + radius},
+        {rect.x + rect.width - radius, rect.y + radius},
+        {rect.x + rect.width - radius, rect.y + rect.height - radius},
+        {rect.x + radius, rect.y + rect.height - radius}
+    };
+    f32 startAngles[4] = {PI, PI * 1.5f, 0, PI * 0.5f};
+
+    for (i32 c = 0; c < 4; ++c) {
+        for (i32 i = 0; i <= cornerSegs; ++i) {
+            f32 angle = startAngles[c] + (PI / 2) * i / cornerSegs;
+            f32 x = corners[c].x + radius * std::cos(angle);
+            f32 y = corners[c].y + radius * std::sin(angle);
+            Point2f tp = transformPoint({x, y});
+            verts.push_back({tp.x, tp.y, 0, 0, radialColor(x, y)});
+        }
+    }
+
+    u32 vertOffset = addVertices(verts.data(), static_cast<u32>(verts.size()));
+
+    std::vector<u32> inds;
+    u32 outerN = static_cast<u32>(verts.size() - 1);
+    for (u32 i = 0; i < outerN; ++i) {
+        inds.push_back(0);
+        inds.push_back(1 + i);
+        inds.push_back(1 + (i + 1) % outerN);
+    }
+
+    addIndices(inds.data(), static_cast<u32>(inds.size()), vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
+}
+
+void RenderContext::addEllipseRadialGradient(Point2f center, f32 rx, f32 ry,
+                                              const RadialGradientBrush& brush, i32 segments) {
+    const auto& stops = brush.stops();
+    if (stops.size() < 2) return;
+
+    const f32 gcx = center.x + (brush.center().x - 0.5f) * rx * 2;
+    const f32 gcy = center.y + (brush.center().y - 0.5f) * ry * 2;
+    const f32 grx = brush.radiusX() * rx * 2;
+    const f32 gry = brush.radiusY() * ry * 2;
+
+    auto radialColor = [&](f32 x, f32 y) -> u32 {
+        f32 dx = (grx > 0) ? (x - gcx) / grx : 0;
+        f32 dy = (gry > 0) ? (y - gcy) / gry : 0;
+        f32 dist = std::clamp(std::sqrt(dx * dx + dy * dy), 0.0f, 1.0f);
+        return packColor(sampleGradientStops(stops, dist), m_currentState.opacity);
+    };
+
+    std::vector<Vertex> verts;
+    Point2f ct = transformPoint(center);
+    verts.push_back({ct.x, ct.y, 0.5f, 0.5f, radialColor(center.x, center.y)});
+
+    for (i32 i = 0; i < segments; ++i) {
+        f32 angle = 2 * PI * i / segments;
+        f32 x = center.x + rx * std::cos(angle);
+        f32 y = center.y + ry * std::sin(angle);
+        Point2f tp = transformPoint({x, y});
+        verts.push_back({tp.x, tp.y, 0, 0, radialColor(x, y)});
+    }
+
+    u32 vertOffset = addVertices(verts.data(), static_cast<u32>(verts.size()));
+
+    std::vector<u32> inds;
+    for (i32 i = 0; i < segments; ++i) {
+        inds.push_back(0);
+        inds.push_back(1 + i);
+        inds.push_back(1 + (i + 1) % segments);
+    }
+
+    addIndices(inds.data(), static_cast<u32>(inds.size()), vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
+}
+
 void RenderContext::addEllipse(Point2f center, f32 rx, f32 ry, Color color, i32 segments) {
     u32 c = packColor(color, m_currentState.opacity);
     
@@ -12356,6 +12537,11 @@ void RenderContext::fillRect(Rectf rect, const Brush& brush) {
         if (grad.stops().size() >= 2) {
             fillRectGradient(rect, grad.stops().front().color, grad.stops().back().color);
         }
+    } else if (brush.type() == BrushType::RadialGradient) {
+        auto& rad = static_cast<const RadialGradientBrush&>(brush);
+        if (rad.stops().size() >= 2) {
+            addRectRadialGradient(rect, rad);
+        }
     }
 }
 
@@ -12394,6 +12580,11 @@ void RenderContext::fillRoundedRect(Rectf rect, f32 cornerRadius, const Brush& b
         auto& grad = static_cast<const LinearGradientBrush&>(brush);
         if (grad.stops().size() >= 2) {
             fillRoundedRectGradient(rect, cornerRadius, grad.stops().front().color, grad.stops().back().color);
+        }
+    } else if (brush.type() == BrushType::RadialGradient) {
+        auto& rad = static_cast<const RadialGradientBrush&>(brush);
+        if (rad.stops().size() >= 2) {
+            addRoundedRectRadialGradient(rect, cornerRadius, rad);
         }
     }
 }
@@ -12593,6 +12784,11 @@ void RenderContext::fillEllipse(Point2f center, f32 radiusX, f32 radiusY, const 
     if (brush.type() == BrushType::Solid) {
         auto& solid = static_cast<const SolidColorBrush&>(brush);
         fillEllipse(center, radiusX, radiusY, solid.color());
+    } else if (brush.type() == BrushType::RadialGradient) {
+        auto& rad = static_cast<const RadialGradientBrush&>(brush);
+        if (rad.stops().size() >= 2) {
+            addEllipseRadialGradient(center, radiusX, radiusY, rad);
+        }
     }
 }
 
@@ -15968,8 +16164,14 @@ void Panel::onRender(RenderContext& ctx) {
     // Check for gradient background
     bool hasGradient = backgroundGradientTop().a > 0 && backgroundGradientBottom().a > 0;
     
-    // Draw background
-    if (hasGradient && !isPressed() && !isHovered()) {
+    // Draw background — backgroundBrush takes precedence when not hovered/pressed
+    if (m_backgroundBrush && !isPressed() && !isHovered()) {
+        if (cr > 0) {
+            ctx.fillRoundedRect(rect, cr, *m_backgroundBrush);
+        } else {
+            ctx.fillRect(rect, *m_backgroundBrush);
+        }
+    } else if (hasGradient && !isPressed() && !isHovered()) {
         // Use gradient (gradient takes precedence over solid bg when not hovered/pressed)
         if (cr > 0) {
             ctx.fillRoundedRectGradient(rect, cr, backgroundGradientTop(), backgroundGradientBottom());
