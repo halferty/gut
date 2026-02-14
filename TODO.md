@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 36 done, 11 partial, 16 missing** out of 63 core features.
+**Score: 43 done, 10 partial, 10 missing** out of 63 core features.
 
 ---
 
@@ -65,24 +65,24 @@
 - [x] isHitTestVisible
 - [ ] Mouse drag — capture exists, no general drag-and-drop API
 - [ ] Cursor styles — enum declared, not connected to OS
-- [ ] Clipboard — copy/paste integration with OS
+- [~] Clipboard — TextBox uses NSPasteboard; no general API yet
 - [ ] IME input — CJK composition support
 - [ ] Keyboard shortcuts / accelerators — global and scoped bindings
 
 ## Controls
 
 - [x] Button — label, hover/pressed/disabled states, onClick
-- [x] ScrollViewer — H/V scrollbar, scroll position, mouse wheel (thumb drag TODO)
-- [ ] TextBox / TextInput
-- [ ] CheckBox
-- [ ] RadioButton
+- [x] ScrollViewer — H/V scrollbar, scroll position, mouse wheel, thumb drag
+- [x] TextBox / TextInput — single-line editing, caret, selection, placeholder, password, submit
+- [x] CheckBox — toggle with label, checked/unchecked, disabled state, keyboard (Space)
+- [x] RadioButton — mutually exclusive groups, auto-uncheck siblings, keyboard (Space)
 - [ ] Toggle / Switch
 - [ ] Slider
-- [ ] ComboBox / Dropdown
+- [x] DropDown (selection menu, scroll, auto up/down direction)
 - [ ] ProgressBar
 - [ ] Tooltip
 - [ ] ContextMenu
-- [ ] TabControl
+- [x] TabControl
 - [ ] ListView / ItemsControl
 - [ ] TreeView
 - [ ] Dialog / Modal

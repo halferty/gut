@@ -4417,6 +4417,342 @@ private:
 } // namespace gut
 
 
+// --- gut/elements/CheckBox.h ---
+
+#include <functional>
+
+namespace gut {
+
+/**
+ * @brief CheckBox control — togglable check with a text label.
+ */
+class GUT_API CheckBox : public Element {
+    GUT_OBJECT(CheckBox, Element)
+    
+public:
+    CheckBox() { setfocusable(true); }
+    explicit CheckBox(String label);
+    ~CheckBox() override = default;
+    
+    // -------------------------------------------------------------------------
+    // State
+    // -------------------------------------------------------------------------
+    
+    GUT_PROPERTY(bool, isChecked, false)
+    
+    // -------------------------------------------------------------------------
+    // Content
+    // -------------------------------------------------------------------------
+    
+    GUT_PROPERTY(String, label, "")
+    
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+    
+    GUT_PROPERTY(f32, boxSize, 16.0f)
+    GUT_PROPERTY(f32, fontSize, 13.0f)
+    GUT_PROPERTY(f32, spacing, 6.0f)
+    GUT_PROPERTY(Color, foreground, Color::fromHex(0xE0E0E0))
+    GUT_PROPERTY(Color, boxBackground, Color::fromHex(0x3C3C4A))
+    GUT_PROPERTY(Color, boxBorderColor, Color::fromHex(0x606070))
+    GUT_PROPERTY(Color, checkedBackground, Color::fromRgba8(60, 130, 220, 255))
+    GUT_PROPERTY(Color, checkedBorderColor, Color::fromRgba8(80, 150, 240, 255))
+    GUT_PROPERTY(Color, checkmarkColor, Color::white())
+    GUT_PROPERTY(Color, hoverBorderColor, Color::fromRgba8(100, 160, 240, 255))
+    GUT_PROPERTY(Color, disabledForeground, Color::fromHex(0x808080))
+    GUT_PROPERTY(f32, boxCornerRadius, 3.0f)
+    GUT_PROPERTY(Color, focusBorderColor, Color::fromRgba8(100, 180, 255, 255))
+    
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+    
+    void setOnCheckedChanged(std::function<void(bool)> callback) { m_onCheckedChanged = std::move(callback); }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+
+private:
+    void toggle();
+    std::function<void(bool)> m_onCheckedChanged;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/RadioButton.h ---
+
+#include <functional>
+
+namespace gut {
+
+/**
+ * @brief RadioButton control — mutually exclusive selection within a group.
+ *
+ * RadioButtons with the same groupName auto-uncheck siblings when one is checked.
+ */
+class GUT_API RadioButton : public Element {
+    GUT_OBJECT(RadioButton, Element)
+    
+public:
+    RadioButton() { setfocusable(true); }
+    explicit RadioButton(String label, String group = "default");
+    ~RadioButton() override = default;
+    
+    // -------------------------------------------------------------------------
+    // State
+    // -------------------------------------------------------------------------
+    
+    GUT_PROPERTY(bool, isChecked, false)
+    GUT_PROPERTY(String, groupName, "default")
+    
+    // -------------------------------------------------------------------------
+    // Content
+    // -------------------------------------------------------------------------
+    
+    GUT_PROPERTY(String, label, "")
+    
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+    
+    GUT_PROPERTY(f32, circleSize, 16.0f)
+    GUT_PROPERTY(f32, fontSize, 13.0f)
+    GUT_PROPERTY(f32, spacing, 6.0f)
+    GUT_PROPERTY(Color, foreground, Color::fromHex(0xE0E0E0))
+    GUT_PROPERTY(Color, circleBackground, Color::fromHex(0x3C3C4A))
+    GUT_PROPERTY(Color, circleBorderColor, Color::fromHex(0x606070))
+    GUT_PROPERTY(Color, checkedBackground, Color::fromRgba8(60, 130, 220, 255))
+    GUT_PROPERTY(Color, checkedBorderColor, Color::fromRgba8(80, 150, 240, 255))
+    GUT_PROPERTY(Color, dotColor, Color::white())
+    GUT_PROPERTY(Color, hoverBorderColor, Color::fromRgba8(100, 160, 240, 255))
+    GUT_PROPERTY(Color, disabledForeground, Color::fromHex(0x808080))
+    GUT_PROPERTY(Color, focusBorderColor, Color::fromRgba8(100, 180, 255, 255))
+    
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+    
+    void setOnCheckedChanged(std::function<void(bool)> callback) { m_onCheckedChanged = std::move(callback); }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+
+private:
+    void check();
+    void uncheckSiblings();
+    std::function<void(bool)> m_onCheckedChanged;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/DropDown.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief A dropdown menu control that displays a list of selectable items.
+ *
+ * Features:
+ *   - Single-selection dropdown (not a combo box — no text editing)
+ *   - Scrollable item list when items exceed maxDropHeight
+ *   - Automatically opens upward or downward based on available screen space
+ *   - Keyboard navigation: Up/Down to highlight, Enter/Space to select, Escape to close
+ *   - Click outside to dismiss
+ */
+class GUT_API DropDown : public Element {
+    GUT_OBJECT(DropDown, Element)
+public:
+    DropDown();
+    ~DropDown() override = default;
+
+    // -------------------------------------------------------------------------
+    // Items
+    // -------------------------------------------------------------------------
+    void addItem(String item);
+    void removeItem(usize index);
+    void clearItems();
+    usize itemCount() const { return m_items.size(); }
+    const String& itemAt(usize index) const { return m_items[index]; }
+
+    // -------------------------------------------------------------------------
+    // Selection
+    // -------------------------------------------------------------------------
+    GUT_PROPERTY(isize, selectedIndex, -1)
+    String selectedItem() const;
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+    GUT_PROPERTY(f32, fontSize, 13.0f)
+    GUT_PROPERTY(f32, itemHeight, 26.0f)
+    GUT_PROPERTY(f32, maxDropHeight, 200.0f)
+    GUT_PROPERTY(f32, cornerRadius, 4.0f)
+    GUT_PROPERTY(f32, arrowSize, 8.0f)
+    GUT_PROPERTY(String, placeholder, "Select...")
+
+    // Colors — button
+    GUT_PROPERTY(Color, foreground, Color::fromHex(0xE0E0E0))
+    GUT_PROPERTY(Color, buttonBackground, Color::fromHex(0x2D2D3A))
+    GUT_PROPERTY(Color, borderColor, Color::fromHex(0x606070))
+    GUT_PROPERTY(Color, hoverBorderColor, Color::fromRgba8(100, 160, 240, 255))
+    GUT_PROPERTY(Color, focusBorderColor, Color::fromRgba8(100, 180, 255, 255))
+    GUT_PROPERTY(Color, arrowColor, Color::fromHex(0xA0A0B0))
+
+    // Colors — popup
+    GUT_PROPERTY(Color, dropBackground, Color::fromHex(0x252534))
+    GUT_PROPERTY(Color, dropBorderColor, Color::fromHex(0x505060))
+    GUT_PROPERTY(Color, itemHoverBackground, Color::fromRgba8(60, 60, 80, 255))
+    GUT_PROPERTY(Color, selectedItemBackground, Color::fromRgba8(60, 130, 220, 255))
+    GUT_PROPERTY(Color, scrollbarTrackColor, Color::fromRgba8(40, 40, 55, 80))
+    GUT_PROPERTY(Color, scrollbarThumbColor, Color::fromRgba8(100, 100, 120, 160))
+
+    GUT_PROPERTY(Color, disabledForeground, Color::fromHex(0x808080))
+
+    // -------------------------------------------------------------------------
+    // State
+    // -------------------------------------------------------------------------
+    bool isOpen() const { return m_isOpen; }
+    void open();
+    void close();
+    void toggle();
+
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+    void setOnSelectionChanged(std::function<void(isize)> callback) { m_onSelectionChanged = std::move(callback); }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+
+private:
+    std::vector<String> m_items;
+    bool m_isOpen{false};
+    bool m_opensUpward{false};
+    f32 m_scrollOffset{0.0f};
+    isize m_hoveredItemIndex{-1};
+    f32 m_popupHeight{0.0f};
+    std::function<void(isize)> m_onSelectionChanged;
+
+    // Helpers
+    f32 totalItemsHeight() const;
+    f32 effectivePopupHeight() const;
+    bool needsScroll() const;
+    f32 maxScrollOffset() const;
+    Rectf popupLocalRect() const;
+    isize itemIndexAtLocalY(f32 localY) const;
+    void renderPopupOverlay(RenderContext& ctx);
+    static constexpr f32 kScrollbarWidth = 8.0f;
+    static constexpr f32 kPadH = 8.0f;  // horizontal padding inside button
+};
+
+} // namespace gut
+
+
+// --- gut/elements/TabControl.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief A tab control that displays tabbed pages.
+ *
+ * Each tab has a header label and a content element. Only the selected tab's
+ * content is visible. The tab bar is rendered at the top; the content area
+ * fills the remainder.
+ *
+ * Usage:
+ *     auto tabs = make<TabControl>();
+ *     tabs->addTab("General", generalPanel);
+ *     tabs->addTab("Advanced", advancedPanel);
+ *     tabs->setselectedIndex(0);
+ */
+class GUT_API TabControl : public Panel {
+    GUT_OBJECT(TabControl, Panel)
+public:
+    TabControl();
+    ~TabControl() override = default;
+
+    // -------------------------------------------------------------------------
+    // Tabs
+    // -------------------------------------------------------------------------
+    void addTab(String title, Ref<Element> content);
+    void removeTab(usize index);
+    usize tabCount() const { return m_tabs.size(); }
+
+    GUT_PROPERTY(isize, selectedIndex, 0)
+    void selectTab(isize index);
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+    GUT_PROPERTY(f32, tabBarHeight, 32.0f)
+    GUT_PROPERTY(f32, tabFontSize, 12.0f)
+    GUT_PROPERTY(f32, tabPadding, 16.0f)    // horizontal padding per tab
+    GUT_PROPERTY(f32, tabSpacing, 2.0f)     // gap between tabs
+
+    // Colors — tab bar
+    GUT_PROPERTY(Color, tabBarBackground, Color::fromHex(0x252534))
+    GUT_PROPERTY(Color, tabBarBorderColor, Color::fromHex(0x404050))
+
+    // Colors — tab headers
+    GUT_PROPERTY(Color, tabForeground, Color::fromHex(0xA0A0B0))
+    GUT_PROPERTY(Color, tabActiveForeground, Color::fromHex(0xE0E0F0))
+    GUT_PROPERTY(Color, tabActiveIndicator, Color::fromRgba8(80, 150, 240, 255))
+    GUT_PROPERTY(Color, tabHoverBackground, Color::fromRgba8(60, 60, 80, 100))
+
+    // Colors — content area
+    GUT_PROPERTY(Color, contentBackground, Color::transparent())
+
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+    void setOnTabChanged(std::function<void(isize)> callback) { m_onTabChanged = std::move(callback); }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+
+private:
+    struct Tab {
+        String title;
+        Ref<Element> content;
+    };
+    std::vector<Tab> m_tabs;
+    isize m_hoveredTab{-1};
+    std::function<void(isize)> m_onTabChanged;
+
+    // Helpers
+    isize tabIndexAtX(f32 x) const;
+    f32 tabHeaderWidth(const String& title) const;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/Image.h ---
 
 
@@ -4888,7 +5224,25 @@ public:
      * @brief Set the viewport size (also invalidates layout).
      */
     void setSize(f32 width, f32 height);
-    
+
+    // -------------------------------------------------------------------------
+    // Overlays (popups, tooltips rendered on top of everything)
+    // -------------------------------------------------------------------------
+
+    /**
+     * @brief Register an overlay render callback.
+     * Overlays are rendered after the entire element tree, so they appear
+     * on top of all siblings and ignore parent clipping.
+     * @param owner The element that owns this overlay (used as a key).
+     * @param renderFn Callback invoked with a clean RenderContext (identity transform).
+     */
+    void addOverlay(Element* owner, std::function<void(RenderContext&)> renderFn);
+
+    /**
+     * @brief Remove the overlay owned by the given element.
+     */
+    void removeOverlay(Element* owner);
+
     // -------------------------------------------------------------------------
     // Time
     // -------------------------------------------------------------------------
@@ -4943,6 +5297,9 @@ private:
     Size2f m_size{};
     f64 m_totalTime{0.0};
     bool m_layoutDirty{true};
+
+    // Overlay render callbacks (popups, tooltips, etc.)
+    std::vector<std::pair<Element*, std::function<void(RenderContext&)>>> m_overlays;
 };
 
 } // namespace gut
@@ -15250,6 +15607,1003 @@ void Button::onMouseLeave() {
 } // namespace gut
 
 
+// --- elements/CheckBox.cpp ---
+
+namespace gut {
+
+CheckBox::CheckBox(String text) {
+    setlabel(std::move(text));
+    setfocusable(true);
+}
+
+void CheckBox::toggle() {
+    setisChecked(!isChecked());
+    if (m_onCheckedChanged) {
+        m_onCheckedChanged(isChecked());
+    }
+}
+
+Size2f CheckBox::measureOverride(Size2f availableSize) {
+    f32 textW = 0;
+    f32 textH = boxSize();
+    
+    if (!label().empty() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                textW = face->measureWidth(label());
+                textH = std::max(textH, face->lineHeight());
+            }
+        }
+    }
+    
+    f32 totalW = boxSize() + (textW > 0 ? spacing() + textW : 0);
+    return {totalW, textH};
+}
+
+void CheckBox::onRender(RenderContext& ctx) {
+    f32 bs = boxSize();
+    f32 cy = (bounds().height - bs) * 0.5f;
+    Rectf box = {0, cy, bs, bs};
+    
+    bool checked = isChecked();
+    bool hovered = isHovered();
+    bool disabled = !isEnabled();
+    
+    // Box fill
+    Color bg = checked ? checkedBackground() : boxBackground();
+    if (disabled) bg = Color::fromRgba8(bg.r * 0.5f, bg.g * 0.5f, bg.b * 0.5f, bg.a);
+    ctx.fillRoundedRect(box, boxCornerRadius(), bg);
+    
+    // Box border
+    Color border = checked ? checkedBorderColor()
+                  : hovered ? hoverBorderColor()
+                  : boxBorderColor();
+    ctx.strokeRoundedRect(box, boxCornerRadius(), border, 1.0f);
+    
+    // Checkmark (two lines forming a check)
+    if (checked) {
+        Color cm = checkmarkColor();
+        f32 t = std::max(1.5f, bs * 0.1f);
+        // The check shape: short down-stroke then long up-stroke
+        f32 x0 = box.x + bs * 0.22f;
+        f32 y0 = box.y + bs * 0.50f;
+        f32 x1 = box.x + bs * 0.42f;
+        f32 y1 = box.y + bs * 0.72f;
+        f32 x2 = box.x + bs * 0.78f;
+        f32 y2 = box.y + bs * 0.30f;
+        ctx.drawLine({x0, y0}, {x1, y1}, cm, t);
+        ctx.drawLine({x1, y1}, {x2, y2}, cm, t);
+    }
+    
+    // Label
+    if (!label().empty() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                Color fg = disabled ? disabledForeground() : foreground();
+                f32 textX = bs + spacing();
+                f32 textY = (bounds().height - face->lineHeight()) * 0.5f + face->ascender();
+                ctx.drawText(face.get(), label(), {textX, textY}, fg);
+            }
+        }
+    }
+    
+    // Focus ring
+    if (isFocused()) {
+        Color fc = focusBorderColor();
+        Rectf focusRect = {-2, -2, bounds().width + 4, bounds().height + 4};
+        ctx.strokeRoundedRect(focusRect, boxCornerRadius() + 2, fc, 1.5f);
+    }
+}
+
+bool CheckBox::onMouseEvent(const MouseEvent& event) {
+    if (!isEnabled()) return false;
+    
+    switch (event.type) {
+        case MouseEventType::ButtonDown:
+            if (event.button == MouseButton::Left) {
+                setisPressed(true);
+                return true;
+            }
+            break;
+        case MouseEventType::ButtonUp:
+            if (event.button == MouseButton::Left && isPressed()) {
+                setisPressed(false);
+                if (containsPoint(event.position)) {
+                    toggle();
+                    clicked().emit();
+                }
+                return true;
+            }
+            break;
+        default: break;
+    }
+    return false;
+}
+
+bool CheckBox::onKeyEvent(const KeyEvent& event) {
+    if (event.type == KeyEventType::KeyDown && event.key == Key::Space) {
+        toggle();
+        clicked().emit();
+        return true;
+    }
+    return false;
+}
+
+void CheckBox::onMouseEnter() {
+    Element::onMouseEnter();
+    invalidateRender();
+}
+
+void CheckBox::onMouseLeave() {
+    Element::onMouseLeave();
+    setisPressed(false);
+    invalidateRender();
+}
+
+} // namespace gut
+
+
+// --- elements/RadioButton.cpp ---
+
+namespace gut {
+
+RadioButton::RadioButton(String text, String group) {
+    setlabel(std::move(text));
+    setgroupName(std::move(group));
+    setfocusable(true);
+}
+
+void RadioButton::uncheckSiblings() {
+    if (!parent()) return;
+    Panel* p = dynamic_cast<Panel*>(parent());
+    if (!p) return;
+    for (usize i = 0; i < p->childCount(); ++i) {
+        RadioButton* rb = dynamic_cast<RadioButton*>(p->childAt(i));
+        if (rb && rb != this && rb->groupName() == groupName()) {
+            if (rb->isChecked()) {
+                rb->setisChecked(false);
+                if (rb->m_onCheckedChanged) {
+                    rb->m_onCheckedChanged(false);
+                }
+            }
+        }
+    }
+}
+
+void RadioButton::check() {
+    if (isChecked()) return;  // already checked — nothing to do
+    uncheckSiblings();
+    setisChecked(true);
+    if (m_onCheckedChanged) {
+        m_onCheckedChanged(true);
+    }
+}
+
+Size2f RadioButton::measureOverride(Size2f availableSize) {
+    f32 textW = 0;
+    f32 textH = circleSize();
+    
+    if (!label().empty() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                textW = face->measureWidth(label());
+                textH = std::max(textH, face->lineHeight());
+            }
+        }
+    }
+    
+    f32 totalW = circleSize() + (textW > 0 ? spacing() + textW : 0);
+    return {totalW, textH};
+}
+
+void RadioButton::onRender(RenderContext& ctx) {
+    f32 cs = circleSize();
+    f32 r = cs * 0.5f;
+    f32 cy = bounds().height * 0.5f;
+    Point2f center = {r, cy};
+    
+    bool checked = isChecked();
+    bool hovered = isHovered();
+    bool disabled = !isEnabled();
+    
+    // Outer circle fill
+    Color bg = checked ? checkedBackground() : circleBackground();
+    if (disabled) bg = Color::fromRgba8(bg.r * 0.5f, bg.g * 0.5f, bg.b * 0.5f, bg.a);
+    ctx.fillEllipse(center, r, r, bg);
+    
+    // Outer circle border
+    Color border = checked ? checkedBorderColor()
+                  : hovered ? hoverBorderColor()
+                  : circleBorderColor();
+    ctx.strokeEllipse(center, r, r, border, 1.0f);
+    
+    // Inner dot when checked
+    if (checked) {
+        f32 dotR = r * 0.38f;
+        ctx.fillEllipse(center, dotR, dotR, dotColor());
+    }
+    
+    // Label
+    if (!label().empty() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                Color fg = disabled ? disabledForeground() : foreground();
+                f32 textX = cs + spacing();
+                f32 textY = (bounds().height - face->lineHeight()) * 0.5f + face->ascender();
+                ctx.drawText(face.get(), label(), {textX, textY}, fg);
+            }
+        }
+    }
+    
+    // Focus ring
+    if (isFocused()) {
+        Color fc = focusBorderColor();
+        Rectf focusRect = {-2, -2, bounds().width + 4, bounds().height + 4};
+        ctx.strokeRoundedRect(focusRect, cs * 0.5f + 2, fc, 1.5f);
+    }
+}
+
+bool RadioButton::onMouseEvent(const MouseEvent& event) {
+    if (!isEnabled()) return false;
+    
+    switch (event.type) {
+        case MouseEventType::ButtonDown:
+            if (event.button == MouseButton::Left) {
+                setisPressed(true);
+                return true;
+            }
+            break;
+        case MouseEventType::ButtonUp:
+            if (event.button == MouseButton::Left && isPressed()) {
+                setisPressed(false);
+                if (containsPoint(event.position)) {
+                    check();
+                    clicked().emit();
+                }
+                return true;
+            }
+            break;
+        default: break;
+    }
+    return false;
+}
+
+bool RadioButton::onKeyEvent(const KeyEvent& event) {
+    if (event.type == KeyEventType::KeyDown && event.key == Key::Space) {
+        check();
+        clicked().emit();
+        return true;
+    }
+    return false;
+}
+
+void RadioButton::onMouseEnter() {
+    Element::onMouseEnter();
+    invalidateRender();
+}
+
+void RadioButton::onMouseLeave() {
+    Element::onMouseLeave();
+    setisPressed(false);
+    invalidateRender();
+}
+
+} // namespace gut
+
+
+// --- elements/DropDown.cpp ---
+
+#include <algorithm>
+#include <cmath>
+
+namespace gut {
+
+DropDown::DropDown() {
+    setfocusable(true);
+}
+
+// ---- Item management --------------------------------------------------------
+
+void DropDown::addItem(String item) {
+    m_items.push_back(std::move(item));
+    invalidateLayout();
+}
+
+void DropDown::removeItem(usize index) {
+    if (index < m_items.size()) {
+        m_items.erase(m_items.begin() + static_cast<isize>(index));
+        if (selectedIndex() >= static_cast<isize>(m_items.size())) {
+            setselectedIndex(static_cast<isize>(m_items.size()) - 1);
+        }
+        invalidateLayout();
+    }
+}
+
+void DropDown::clearItems() {
+    m_items.clear();
+    setselectedIndex(-1);
+    m_scrollOffset = 0;
+    invalidateLayout();
+}
+
+String DropDown::selectedItem() const {
+    isize idx = selectedIndex();
+    if (idx >= 0 && idx < static_cast<isize>(m_items.size())) {
+        return m_items[static_cast<usize>(idx)];
+    }
+    return {};
+}
+
+// ---- Open / close -----------------------------------------------------------
+
+void DropDown::open() {
+    if (m_isOpen || m_items.empty()) return;
+    m_isOpen = true;
+
+    // Decide direction: open downward unless there's not enough space below
+    Rectf sb = screenBounds();
+    Size2f winSz = context()->size();
+    f32 spaceBelow = winSz.height - (sb.y + sb.height);
+    f32 spaceAbove = sb.y;
+
+    m_popupHeight = effectivePopupHeight();
+    m_opensUpward = (spaceBelow < m_popupHeight && spaceAbove > spaceBelow);
+
+    // Ensure the selected item is visible
+    if (selectedIndex() >= 0) {
+        f32 itemTop = static_cast<f32>(selectedIndex()) * itemHeight();
+        f32 itemBot = itemTop + itemHeight();
+        if (itemTop < m_scrollOffset) {
+            m_scrollOffset = itemTop;
+        } else if (itemBot > m_scrollOffset + m_popupHeight) {
+            m_scrollOffset = itemBot - m_popupHeight;
+        }
+    }
+    m_hoveredItemIndex = selectedIndex();
+
+    // Capture the mouse so we get all clicks (for dismiss-on-click-outside)
+    if (context()) {
+        context()->inputManager().captureMouse(this);
+
+        // Register an overlay so the popup renders on top of everything
+        context()->addOverlay(this, [this](RenderContext& ctx) {
+            renderPopupOverlay(ctx);
+        });
+    }
+    invalidateRender();
+}
+
+void DropDown::close() {
+    if (!m_isOpen) return;
+    m_isOpen = false;
+    m_hoveredItemIndex = -1;
+    if (context()) {
+        context()->inputManager().releaseMouse();
+        context()->removeOverlay(this);
+    }
+    invalidateRender();
+}
+
+void DropDown::toggle() {
+    if (m_isOpen) close(); else open();
+}
+
+// ---- Helpers ----------------------------------------------------------------
+
+f32 DropDown::totalItemsHeight() const {
+    return static_cast<f32>(m_items.size()) * itemHeight();
+}
+
+f32 DropDown::effectivePopupHeight() const {
+    return std::min(totalItemsHeight(), maxDropHeight());
+}
+
+bool DropDown::needsScroll() const {
+    return totalItemsHeight() > m_popupHeight;
+}
+
+f32 DropDown::maxScrollOffset() const {
+    return std::max(0.0f, totalItemsHeight() - m_popupHeight);
+}
+
+Rectf DropDown::popupLocalRect() const {
+    f32 bh = bounds().height;
+    if (m_opensUpward) {
+        return {0, -m_popupHeight - 2.0f, bounds().width, m_popupHeight};
+    } else {
+        return {0, bh + 2.0f, bounds().width, m_popupHeight};
+    }
+}
+
+isize DropDown::itemIndexAtLocalY(f32 localY) const {
+    Rectf pr = popupLocalRect();
+    f32 relY = localY - pr.y + m_scrollOffset;
+    if (relY < 0) return -1;
+    isize idx = static_cast<isize>(relY / itemHeight());
+    if (idx >= static_cast<isize>(m_items.size())) return -1;
+    return idx;
+}
+
+// ---- Measure ----------------------------------------------------------------
+
+Size2f DropDown::measureOverride(Size2f availableSize) {
+    // Button height is itemHeight, width stretches to available or content
+    f32 w = 0;
+    if (context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                // Measure widest item
+                for (const auto& item : m_items) {
+                    w = std::max(w, face->measureWidth(item));
+                }
+                // Also measure placeholder
+                w = std::max(w, face->measureWidth(placeholder()));
+            }
+        }
+    }
+    // Add padding + arrow space
+    w += kPadH * 2 + arrowSize() + kPadH;
+    return {w, itemHeight()};
+}
+
+// ---- Render -----------------------------------------------------------------
+
+void DropDown::onRender(RenderContext& ctx) {
+    f32 bw = bounds().width;
+    f32 bh = bounds().height;
+    f32 cr = cornerRadius();
+    bool disabled = !isEnabled();
+    bool hovered = isHovered();
+
+    // --- Button background ---
+    ctx.fillRoundedRect({0, 0, bw, bh}, cr, buttonBackground());
+
+    // --- Button border ---
+    Color bc = m_isOpen ? focusBorderColor()
+             : isFocused() ? focusBorderColor()
+             : hovered ? hoverBorderColor()
+             : borderColor();
+    ctx.strokeRoundedRect({0, 0, bw, bh}, cr, bc, 1.0f);
+
+    // --- Selected text or placeholder ---
+    if (context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                String text = selectedItem();
+                Color fg = disabled ? disabledForeground() : foreground();
+                if (text.empty()) {
+                    text = placeholder();
+                    fg = Color::fromRgba8(fg.r * 0.5f, fg.g * 0.5f, fg.b * 0.5f, fg.a);
+                }
+                f32 textY = (bh - face->lineHeight()) * 0.5f + face->ascender();
+                // Clip text to not overlap arrow
+                ctx.save();
+                ctx.pushClip({kPadH, 0, bw - kPadH * 2 - arrowSize() - kPadH, bh});
+                ctx.drawText(face.get(), text, {kPadH, textY}, fg);
+                ctx.popClip();
+                ctx.restore();
+            }
+        }
+    }
+
+    // --- Arrow (chevron) ---
+    {
+        f32 as = arrowSize();
+        f32 ax = bw - kPadH - as;
+        f32 ay = (bh - as * 0.5f) * 0.5f;
+        Color ac = disabled ? disabledForeground() : arrowColor();
+        if (m_isOpen) {
+            // Up chevron
+            ctx.drawLine({ax, ay + as * 0.5f}, {ax + as * 0.5f, ay}, ac, 1.5f);
+            ctx.drawLine({ax + as * 0.5f, ay}, {ax + as, ay + as * 0.5f}, ac, 1.5f);
+        } else {
+            // Down chevron
+            ctx.drawLine({ax, ay}, {ax + as * 0.5f, ay + as * 0.5f}, ac, 1.5f);
+            ctx.drawLine({ax + as * 0.5f, ay + as * 0.5f}, {ax + as, ay}, ac, 1.5f);
+        }
+    }
+
+    // Popup is drawn via the overlay system (see renderPopupOverlay)
+}
+
+// ---- Popup overlay (rendered on top of everything) --------------------------
+
+void DropDown::renderPopupOverlay(RenderContext& ctx) {
+    if (!m_isOpen || !context()) return;
+
+    // The overlay is called in root (identity) coordinate space.
+    // Translate so that (0,0) corresponds to our element's screen position.
+    Rectf sb = screenBounds();
+    ctx.save();
+    ctx.translate(sb.x, sb.y);
+
+    f32 cr = cornerRadius();
+    Rectf pr = popupLocalRect();
+    bool scroll = needsScroll();
+    f32 itemW = scroll ? pr.width - kScrollbarWidth : pr.width;
+
+    // Popup shadow
+    ctx.drawDropShadow(pr, cr, Color::fromRgba8(0, 0, 0, 100), 12.0f, 0.0f, 4.0f);
+
+    // Popup background
+    ctx.fillRoundedRect(pr, cr, dropBackground());
+
+    // Clip items to popup rect
+    ctx.save();
+    ctx.pushClip(pr, cr);
+
+    // Draw items
+    Font* font = context()->defaultFont();
+    Ref<FontFace> face;
+    if (font) face = font->getFace(fontSize());
+
+    for (isize i = 0; i < static_cast<isize>(m_items.size()); ++i) {
+        f32 iy = pr.y + static_cast<f32>(i) * itemHeight() - m_scrollOffset;
+        // Skip if out of view
+        if (iy + itemHeight() < pr.y || iy > pr.y + pr.height) continue;
+
+        Rectf itemRect = {pr.x, iy, itemW, itemHeight()};
+
+        // Highlight
+        if (i == m_hoveredItemIndex) {
+            ctx.fillRect(itemRect, itemHoverBackground());
+        }
+        if (i == selectedIndex()) {
+            ctx.fillRect(itemRect, selectedItemBackground());
+        }
+
+        // Item text
+        if (face) {
+            f32 textY = iy + (itemHeight() - face->lineHeight()) * 0.5f + face->ascender();
+            ctx.drawText(face.get(), m_items[static_cast<usize>(i)], {pr.x + kPadH, textY}, foreground());
+        }
+    }
+
+    ctx.popClip();
+    ctx.restore();
+
+    // Popup border (on top)
+    ctx.strokeRoundedRect(pr, cr, dropBorderColor(), 1.0f);
+
+    // Scrollbar
+    if (scroll) {
+        f32 sbX = pr.x + pr.width - kScrollbarWidth;
+        f32 sbY = pr.y;
+        f32 sbH = pr.height;
+
+        // Track
+        ctx.fillRoundedRect({sbX, sbY, kScrollbarWidth, sbH}, kScrollbarWidth * 0.5f, scrollbarTrackColor());
+
+        // Thumb
+        f32 viewRatio = m_popupHeight / totalItemsHeight();
+        f32 thumbH = std::max(20.0f, sbH * viewRatio);
+        f32 scrollRatio = (maxScrollOffset() > 0) ? m_scrollOffset / maxScrollOffset() : 0.0f;
+        f32 thumbY = sbY + scrollRatio * (sbH - thumbH);
+        ctx.fillRoundedRect({sbX, thumbY, kScrollbarWidth, thumbH}, kScrollbarWidth * 0.5f, scrollbarThumbColor());
+    }
+
+    ctx.restore();
+}
+
+// ---- Mouse events -----------------------------------------------------------
+
+bool DropDown::onMouseEvent(const MouseEvent& event) {
+    if (!isEnabled()) return false;
+
+    switch (event.type) {
+        case MouseEventType::ButtonDown: {
+            if (event.button != MouseButton::Left) break;
+
+            if (m_isOpen) {
+                // Check if click is inside popup
+                Rectf pr = popupLocalRect();
+                if (event.position.x >= pr.x && event.position.x < pr.x + pr.width &&
+                    event.position.y >= pr.y && event.position.y < pr.y + pr.height) {
+                    // Click on item — select it
+                    isize idx = itemIndexAtLocalY(event.position.y);
+                    if (idx >= 0) {
+                        setselectedIndex(idx);
+                        if (m_onSelectionChanged) m_onSelectionChanged(idx);
+                        close();
+                    }
+                } else if (event.position.x >= 0 && event.position.x < bounds().width &&
+                           event.position.y >= 0 && event.position.y < bounds().height) {
+                    // Click on the button itself — toggle
+                    close();
+                } else {
+                    // Click outside — dismiss
+                    close();
+                }
+                return true;
+            } else {
+                // Open
+                open();
+                return true;
+            }
+        }
+
+        case MouseEventType::Move: {
+            if (m_isOpen) {
+                Rectf pr = popupLocalRect();
+                if (event.position.x >= pr.x && event.position.x < pr.x + pr.width &&
+                    event.position.y >= pr.y && event.position.y < pr.y + pr.height) {
+                    isize idx = itemIndexAtLocalY(event.position.y);
+                    if (idx != m_hoveredItemIndex) {
+                        m_hoveredItemIndex = idx;
+                        invalidateRender();
+                    }
+                } else {
+                    if (m_hoveredItemIndex != -1) {
+                        m_hoveredItemIndex = -1;
+                        invalidateRender();
+                    }
+                }
+                return true;
+            }
+            break;
+        }
+
+        case MouseEventType::Wheel: {
+            if (m_isOpen && needsScroll()) {
+                m_scrollOffset -= event.delta.y * 3.0f;
+                m_scrollOffset = std::clamp(m_scrollOffset, 0.0f, maxScrollOffset());
+                invalidateRender();
+                return true;
+            }
+            break;
+        }
+
+        default:
+            break;
+    }
+    return false;
+}
+
+// ---- Keyboard events --------------------------------------------------------
+
+bool DropDown::onKeyEvent(const KeyEvent& event) {
+    if (!isEnabled()) return false;
+    if (event.type != KeyEventType::KeyDown) return false;
+
+    switch (event.key) {
+        case Key::Space:
+        case Key::Return:
+            if (m_isOpen) {
+                // Select hovered item
+                if (m_hoveredItemIndex >= 0 && m_hoveredItemIndex < static_cast<isize>(m_items.size())) {
+                    setselectedIndex(m_hoveredItemIndex);
+                    if (m_onSelectionChanged) m_onSelectionChanged(m_hoveredItemIndex);
+                }
+                close();
+            } else {
+                open();
+            }
+            return true;
+
+        case Key::Escape:
+            if (m_isOpen) {
+                close();
+                return true;
+            }
+            break;
+
+        case Key::Down:
+            if (m_isOpen) {
+                if (m_hoveredItemIndex < static_cast<isize>(m_items.size()) - 1) {
+                    m_hoveredItemIndex++;
+                    // Scroll to keep visible
+                    f32 itemBot = static_cast<f32>(m_hoveredItemIndex + 1) * itemHeight();
+                    if (itemBot > m_scrollOffset + m_popupHeight) {
+                        m_scrollOffset = itemBot - m_popupHeight;
+                    }
+                    invalidateRender();
+                }
+            } else {
+                // Without opening, cycle selection down
+                if (selectedIndex() < static_cast<isize>(m_items.size()) - 1) {
+                    setselectedIndex(selectedIndex() + 1);
+                    if (m_onSelectionChanged) m_onSelectionChanged(selectedIndex());
+                    invalidateRender();
+                }
+            }
+            return true;
+
+        case Key::Up:
+            if (m_isOpen) {
+                if (m_hoveredItemIndex > 0) {
+                    m_hoveredItemIndex--;
+                    f32 itemTop = static_cast<f32>(m_hoveredItemIndex) * itemHeight();
+                    if (itemTop < m_scrollOffset) {
+                        m_scrollOffset = itemTop;
+                    }
+                    invalidateRender();
+                }
+            } else {
+                if (selectedIndex() > 0) {
+                    setselectedIndex(selectedIndex() - 1);
+                    if (m_onSelectionChanged) m_onSelectionChanged(selectedIndex());
+                    invalidateRender();
+                }
+            }
+            return true;
+
+        case Key::Home:
+            if (m_isOpen && !m_items.empty()) {
+                m_hoveredItemIndex = 0;
+                m_scrollOffset = 0;
+                invalidateRender();
+                return true;
+            }
+            break;
+
+        case Key::End:
+            if (m_isOpen && !m_items.empty()) {
+                m_hoveredItemIndex = static_cast<isize>(m_items.size()) - 1;
+                m_scrollOffset = maxScrollOffset();
+                invalidateRender();
+                return true;
+            }
+            break;
+
+        default:
+            break;
+    }
+    return false;
+}
+
+void DropDown::onMouseEnter() {
+    Element::onMouseEnter();
+    invalidateRender();
+}
+
+void DropDown::onMouseLeave() {
+    Element::onMouseLeave();
+    invalidateRender();
+}
+
+} // namespace gut
+
+
+// --- elements/TabControl.cpp ---
+
+#include <algorithm>
+#include <cmath>
+
+namespace gut {
+
+TabControl::TabControl() {
+    setfocusable(true);
+    setclipToBounds(true);
+}
+
+// ---- Tab management ---------------------------------------------------------
+
+void TabControl::addTab(String title, Ref<Element> content) {
+    // Hide content unless this will be the selected tab
+    bool isSelected = static_cast<isize>(m_tabs.size()) == selectedIndex();
+    content->setvisibility(isSelected ? Visibility::Visible : Visibility::Collapsed);
+    Panel::addChild(content);
+    m_tabs.push_back({std::move(title), std::move(content)});
+    invalidateLayout();
+}
+
+void TabControl::removeTab(usize index) {
+    if (index >= m_tabs.size()) return;
+    Panel::removeChild(m_tabs[index].content.get());
+    m_tabs.erase(m_tabs.begin() + static_cast<isize>(index));
+    if (selectedIndex() >= static_cast<isize>(m_tabs.size())) {
+        selectTab(static_cast<isize>(m_tabs.size()) - 1);
+    }
+    invalidateLayout();
+}
+
+void TabControl::selectTab(isize index) {
+    if (index < 0 || index >= static_cast<isize>(m_tabs.size())) return;
+    if (index == selectedIndex()) return;
+
+    // Hide old
+    isize old = selectedIndex();
+    if (old >= 0 && old < static_cast<isize>(m_tabs.size())) {
+        m_tabs[static_cast<usize>(old)].content->setvisibility(Visibility::Collapsed);
+    }
+
+    setselectedIndex(index);
+
+    // Show new
+    m_tabs[static_cast<usize>(index)].content->setvisibility(Visibility::Visible);
+
+    if (m_onTabChanged) m_onTabChanged(index);
+    invalidateLayout();
+    invalidateRender();
+}
+
+// ---- Helpers ----------------------------------------------------------------
+
+f32 TabControl::tabHeaderWidth(const String& title) const {
+    f32 w = tabPadding() * 2;
+    if (context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(tabFontSize());
+            if (face) {
+                w += face->measureWidth(title);
+            }
+        }
+    }
+    return w;
+}
+
+isize TabControl::tabIndexAtX(f32 x) const {
+    f32 cx = tabSpacing();
+    for (isize i = 0; i < static_cast<isize>(m_tabs.size()); ++i) {
+        f32 tw = tabHeaderWidth(m_tabs[static_cast<usize>(i)].title);
+        if (x >= cx && x < cx + tw) return i;
+        cx += tw + tabSpacing();
+    }
+    return -1;
+}
+
+// ---- Layout -----------------------------------------------------------------
+
+Size2f TabControl::measureOverride(Size2f availableSize) {
+    f32 barH = tabBarHeight();
+    Size2f contentAvail = {availableSize.width, availableSize.height - barH};
+
+    // Measure all content pages (even hidden ones for proper sizing)
+    Size2f maxContent = {0, 0};
+    for (auto& tab : m_tabs) {
+        auto oldVis = tab.content->visibility();
+        // Temporarily make visible for measure
+        tab.content->setvisibility(Visibility::Visible);
+        tab.content->measure(contentAvail);
+        Size2f ds = tab.content->desiredSize();
+        maxContent.width = std::max(maxContent.width, ds.width);
+        maxContent.height = std::max(maxContent.height, ds.height);
+        tab.content->setvisibility(oldVis);
+    }
+
+    return {maxContent.width, barH + maxContent.height};
+}
+
+Size2f TabControl::arrangeOverride(Size2f finalSize) {
+    f32 barH = tabBarHeight();
+    Rectf contentRect = {0, barH, finalSize.width, finalSize.height - barH};
+
+    for (auto& tab : m_tabs) {
+        tab.content->arrange(contentRect);
+    }
+    return finalSize;
+}
+
+// ---- Render -----------------------------------------------------------------
+
+void TabControl::onRender(RenderContext& ctx) {
+    f32 bw = bounds().width;
+    f32 barH = tabBarHeight();
+
+    // Tab bar background
+    ctx.fillRect({0, 0, bw, barH}, tabBarBackground());
+
+    // Tab headers
+    Font* font = context() ? context()->defaultFont() : nullptr;
+    Ref<FontFace> face;
+    if (font) face = font->getFace(tabFontSize());
+
+    f32 cx = tabSpacing();
+    for (isize i = 0; i < static_cast<isize>(m_tabs.size()); ++i) {
+        const auto& tab = m_tabs[static_cast<usize>(i)];
+        f32 tw = tabHeaderWidth(tab.title);
+        bool active = (i == selectedIndex());
+        bool hovered = (i == m_hoveredTab);
+
+        // Tab background on hover
+        if (hovered && !active) {
+            ctx.fillRect({cx, 0, tw, barH}, tabHoverBackground());
+        }
+
+        // Tab text
+        if (face) {
+            Color fg = active ? tabActiveForeground() : tabForeground();
+            f32 textW = face->measureWidth(tab.title);
+            f32 textX = cx + (tw - textW) * 0.5f;
+            f32 textY = (barH - face->lineHeight()) * 0.5f + face->ascender();
+            ctx.drawText(face.get(), tab.title, {textX, textY}, fg);
+        }
+
+        // Active indicator (bottom bar)
+        if (active) {
+            ctx.fillRect({cx, barH - 2.0f, tw, 2.0f}, tabActiveIndicator());
+        }
+
+        cx += tw + tabSpacing();
+    }
+
+    // Tab bar bottom border
+    ctx.fillRect({0, barH - 1.0f, bw, 1.0f}, tabBarBorderColor());
+
+    // Content area background
+    if (contentBackground().a > 0) {
+        ctx.fillRect({0, barH, bw, bounds().height - barH}, contentBackground());
+    }
+
+    // Render children (the visible content page)
+    renderChildren(ctx);
+}
+
+// ---- Mouse ------------------------------------------------------------------
+
+bool TabControl::onMouseEvent(const MouseEvent& event) {
+    f32 barH = tabBarHeight();
+
+    switch (event.type) {
+        case MouseEventType::ButtonDown: {
+            if (event.button == MouseButton::Left && event.position.y < barH) {
+                isize idx = tabIndexAtX(event.position.x);
+                if (idx >= 0) {
+                    selectTab(idx);
+                    return true;
+                }
+            }
+            break;
+        }
+        case MouseEventType::Move: {
+            if (event.position.y < barH) {
+                isize idx = tabIndexAtX(event.position.x);
+                if (idx != m_hoveredTab) {
+                    m_hoveredTab = idx;
+                    invalidateRender();
+                }
+            } else if (m_hoveredTab != -1) {
+                m_hoveredTab = -1;
+                invalidateRender();
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    return Panel::onMouseEvent(event);
+}
+
+// ---- Keyboard ---------------------------------------------------------------
+
+bool TabControl::onKeyEvent(const KeyEvent& event) {
+    if (event.type != KeyEventType::KeyDown) return false;
+
+    switch (event.key) {
+        case Key::Left:
+            if (selectedIndex() > 0) {
+                selectTab(selectedIndex() - 1);
+                return true;
+            }
+            break;
+        case Key::Right:
+            if (selectedIndex() < static_cast<isize>(m_tabs.size()) - 1) {
+                selectTab(selectedIndex() + 1);
+                return true;
+            }
+            break;
+        default:
+            break;
+    }
+    return false;
+}
+
+} // namespace gut
+
+
 // --- elements/Image.cpp ---
 
 #include <cmath>
@@ -16380,7 +17734,12 @@ void Context::render(f32 width, f32 height, f32 devicePixelRatio) {
     
     // Render the element tree
     renderElement(m_root.get());
-    
+
+    // Render overlays (popups, tooltips) on top of everything
+    for (auto& [owner, fn] : m_overlays) {
+        fn(*m_renderContext);
+    }
+
     // End frame on render context (which will flush and call backend->endFrame)
     m_renderContext->endFrame();
 }
@@ -16478,6 +17837,24 @@ void Context::setSize(f32 width, f32 height) {
         m_size = {width, height};
         m_layoutDirty = true;
     }
+}
+
+void Context::addOverlay(Element* owner, std::function<void(RenderContext&)> renderFn) {
+    // Replace if already registered
+    for (auto& [o, fn] : m_overlays) {
+        if (o == owner) {
+            fn = std::move(renderFn);
+            return;
+        }
+    }
+    m_overlays.emplace_back(owner, std::move(renderFn));
+}
+
+void Context::removeOverlay(Element* owner) {
+    m_overlays.erase(
+        std::remove_if(m_overlays.begin(), m_overlays.end(),
+                        [owner](const auto& p) { return p.first == owner; }),
+        m_overlays.end());
 }
 
 void Context::propagateContext(Element* element) {
