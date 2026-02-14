@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 64 done, 8 partial, 0 missing** out of 67 core features.
+**Score: 65 done, 7 partial, 0 missing** out of 67 core features.
 
 ---
 
@@ -37,9 +37,9 @@
 - [x] Inset / inner shadows — drawInsetShadow with per-vertex alpha ring, Panel insetShadow properties
 - [x] Path rendering — Path flattening (quad/cubic/arc subdivision), ear-clipping fill, polyline stroke
 - [x] Polylines — drawPolyline with miter/bevel/round joins, flat/square/round caps, fillPolygon via ear-clipping
-- [ ] Transforms — rotation, scale, skew on elements
+- [x] Transforms — per-element scaleX/scaleY (centre-origin), inverse hit-test; rotation/skew punted
 - [x] Backdrop blur / frosted glass
-- [ ] Blend modes — multiply, screen, overlay, etc.
+- [p] Blend modes — multiply, screen, overlay, etc. (PUNT)
 - [x] 9-slice / 9-patch image rendering — drawImageNineSlice, Image::Stretch::NineSlice, sliceBorders property
 - [p] Render-to-texture — offscreen render targets (PUNT)
 
@@ -52,8 +52,8 @@
 - [x] Text wrapping — word wrap via TextShaper::shapeMultiline in render path
 - [x] Text truncation / ellipsis — CharacterEllipsis + WordEllipsis, single-line
 - [~] Multiple font families — font registry with findFont(family, weight, style) best-match lookup; no system font enumeration
-- [ ] Text selection
-- [ ] Rich text / inline formatting — bold, italic, color spans within one block
+- [p] Text selection (PUNT)
+- [p] Rich text / inline formatting — bold, italic, color spans within one block (PUNT)
 - [ ] Text shadow
 - [ ] Text outline / stroke
 
@@ -70,7 +70,7 @@
 - [ ] Mouse drag — capture exists, no general drag-and-drop API
 - [x] Cursor styles — Element.cursor property, Context callback, NSCursor mapped on macOS
 - [~] Clipboard — TextBox uses NSPasteboard; no general API yet
-- [ ] IME input — CJK composition support
+- [p] IME input — CJK composition support (PUNT)
 - [ ] Keyboard shortcuts / accelerators — global and scoped bindings
 
 ## Controls

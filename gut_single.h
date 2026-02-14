@@ -3798,6 +3798,8 @@ public:
     
     GUT_PROPERTY(Visibility, visibility, Visibility::Visible)
     GUT_PROPERTY(f32, opacity, 1.0f)
+    GUT_PROPERTY(f32, scaleX, 1.0f)
+    GUT_PROPERTY(f32, scaleY, 1.0f)
     GUT_PROPERTY(bool, isEnabled, true)
     GUT_PROPERTY(i32, zIndex, 0)
     GUT_PROPERTY(bool, clipToBounds, false)
@@ -16521,6 +16523,16 @@ void Element::render(RenderContext& ctx) {
     ctx.translate(m_bounds.x, m_bounds.y);
     ctx.setOpacity(ctx.opacity() * opacity());
     
+    // Apply per-element scale (around element centre)
+    f32 sx = scaleX(), sy = scaleY();
+    if (sx != 1.0f || sy != 1.0f) {
+        f32 cx = m_bounds.width * 0.5f;
+        f32 cy = m_bounds.height * 0.5f;
+        ctx.translate(cx, cy);
+        ctx.scale(sx, sy);
+        ctx.translate(-cx, -cy);
+    }
+    
     // Only clip to bounds when explicitly requested
     if (clipToBounds()) {
         ctx.pushClip({0, 0, m_bounds.width, m_bounds.height}, getClipCornerRadius());
@@ -16539,6 +16551,16 @@ void Element::render(RenderContext& ctx) {
 Element* Element::hitTest(Point2f point) {
     if (visibility() != Visibility::Visible || !isHitTestVisible()) {
         return nullptr;
+    }
+    
+    // Account for per-element scale (centred)
+    f32 sx = scaleX(), sy = scaleY();
+    if (sx != 1.0f || sy != 1.0f) {
+        f32 cx = m_bounds.width * 0.5f;
+        f32 cy = m_bounds.height * 0.5f;
+        // Inverse of: translate(cx,cy) * scale(sx,sy) * translate(-cx,-cy)
+        point.x = (point.x - cx) / sx + cx;
+        point.y = (point.y - cy) / sy + cy;
     }
     
     if (!containsPoint(point)) {

@@ -1457,6 +1457,122 @@ static void BuildUI() {
         }
 
         page->addChild(col2);
+
+        // --- Column 3: Scale Transform ---
+        auto col3 = makeRef<StackPanel>(Orientation::Vertical);
+        col3->setspacing(20.0f);
+
+        { // Scale demo card
+            auto card = makeCard(240.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Element Scale"));
+            inner->addChild(makeLabel("Per-element scaleX / scaleY"));
+
+            auto row = makeRef<StackPanel>(Orientation::Horizontal);
+            row->setspacing(16.0f);
+            row->setmargin(Thickness{0, 14, 0, 0});
+
+            // Normal (1x)
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(80, 150, 240));
+                col->addChild(box);
+                col->addChild(makeLabel("1.0x", 10.0f));
+                row->addChild(col);
+            }
+
+            // Scaled up (1.5x)
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(200, 100, 60));
+                box->setscaleX(1.5f); box->setscaleY(1.5f);
+                col->addChild(box);
+                col->addChild(makeLabel("1.5x", 10.0f));
+                row->addChild(col);
+            }
+
+            // Scaled down (0.6x)
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(60, 180, 100));
+                box->setscaleX(0.6f); box->setscaleY(0.6f);
+                col->addChild(box);
+                col->addChild(makeLabel("0.6x", 10.0f));
+                row->addChild(col);
+            }
+
+            inner->addChild(row);
+
+            // Non-uniform scale
+            auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
+            row2->setspacing(16.0f);
+            row2->setmargin(Thickness{0, 24, 0, 0});
+
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(25.0f);
+                box->setbackground(c(200, 80, 200));
+                box->setscaleX(1.8f); box->setscaleY(1.0f);
+                col->addChild(box);
+                col->addChild(makeLabel("1.8x × 1.0x", 10.0f));
+                row2->addChild(col);
+            }
+
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(25.0f);
+                box->setbackground(c(255, 200, 60));
+                box->setscaleX(1.0f); box->setscaleY(1.8f);
+                col->addChild(box);
+                col->addChild(makeLabel("1.0x × 1.8x", 10.0f));
+                row2->addChild(col);
+            }
+
+            inner->addChild(row2);
+            card->addChild(inner);
+            col3->addChild(card);
+        }
+
+        { // Scaled button card
+            auto card = makeCard(240.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Scaled Button"));
+            inner->addChild(makeLabel("Interactive at 1.3x scale"));
+
+            auto btn = makeRef<Button>();
+            btn->setlabel("Click Me");
+            btn->setwidth(100.0f);
+            btn->setheight(36.0f);
+            btn->setscaleX(1.3f);
+            btn->setscaleY(1.3f);
+            btn->setmargin(Thickness{20, 20, 0, 0});
+            inner->addChild(btn);
+
+            card->addChild(inner);
+            col3->addChild(card);
+        }
+
+        page->addChild(col3);
         tabs->addTab("Drawing", page);
     }
 
