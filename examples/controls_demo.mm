@@ -158,7 +158,7 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
     using namespace gut;
     auto c = [](u8 r, u8 g, u8 b, u8 a = 255) { return Color::fromRgba8(r, g, b, a); };
 
-    const f32 W = 800, H = 700;
+    const f32 W = 800, H = 750;
 
     auto root = make<Canvas>();
     root->setwidth(W);
@@ -176,7 +176,7 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         Canvas::setLeft(*title, 30);
         Canvas::setTop(*title, 24);
 
-        auto subtitle = make<Text>("Interactive control showcase  \u2014  TextBox, Button, CheckBox, RadioButton, DropDown, TabControl", 11.0f);
+        auto subtitle = make<Text>("Interactive control showcase  \u2014  TextBox, Button, CheckBox, RadioButton, Toggle, Slider, DropDown, TabControl", 11.0f);
         subtitle->setforeground(c(130, 130, 150));
         subtitle->setisHitTestVisible(false);
         root->addChild(subtitle);
@@ -490,7 +490,7 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         {
             auto vline = make<Panel>();
             vline->setwidth(1);
-            vline->setheight(530);
+            vline->setheight(420);
             vline->setbackground(c(50, 50, 62));
             page->addChild(vline);
             Canvas::setLeft(*vline, 370);
@@ -549,7 +549,7 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
 
         // SECTION: Live echo
         {
-            f32 sx = 395, sy = 160;
+            f32 sx = 395, sy = 155;
 
             auto sectionLabel = make<Text>("Live Text Echo", 13.0f);
             sectionLabel->setforeground(c(180, 180, 200));
@@ -856,6 +856,288 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         tabControl->addTab("Selectors & Forms", page);
     }
 
+    // =====================================================================
+    // TAB 3 — "Toggle & Slider"
+    // =====================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(W - 40);
+        page->setheight(H - 95 - 34);
+
+        // ── Left column: Toggle / Switch ──────────────────────────────
+        Ref<Text> tgStatus;
+        {
+            f32 sx = 20, sy = 15;
+
+            auto sectionLabel = make<Text>("Toggle / Switch", 15.0f);
+            sectionLabel->setforeground(c(200, 200, 220));
+            sectionLabel->setisHitTestVisible(false);
+            page->addChild(sectionLabel);
+            Canvas::setLeft(*sectionLabel, sx);
+            Canvas::setTop(*sectionLabel, sy);
+
+            auto desc = make<Text>("Pill-shaped on/off switches with color themes", 11.0f);
+            desc->setforeground(c(120, 120, 140));
+            desc->setisHitTestVisible(false);
+            page->addChild(desc);
+            Canvas::setLeft(*desc, sx);
+            Canvas::setTop(*desc, sy + 24);
+
+            // Toggle: Dark mode (green, default on)
+            auto tg1 = make<Toggle>("Dark mode");
+            tg1->settabIndex(60);
+            tg1->setisOn(true);
+            page->addChild(tg1);
+            Canvas::setLeft(*tg1, sx);
+            Canvas::setTop(*tg1, sy + 56);
+
+            // Toggle: Notifications (off)
+            auto tg2 = make<Toggle>("Notifications");
+            tg2->settabIndex(61);
+            page->addChild(tg2);
+            Canvas::setLeft(*tg2, sx);
+            Canvas::setTop(*tg2, sy + 92);
+
+            // Toggle: Auto-update (blue, on)
+            auto tg3 = make<Toggle>("Auto-update");
+            tg3->settabIndex(62);
+            tg3->setisOn(true);
+            tg3->settrackOnBackground(c(80, 120, 220));
+            tg3->settrackOnBorderColor(c(70, 110, 200));
+            page->addChild(tg3);
+            Canvas::setLeft(*tg3, sx);
+            Canvas::setTop(*tg3, sy + 128);
+
+            // Toggle: Sound (orange, on)
+            auto tg4 = make<Toggle>("Sound effects");
+            tg4->settabIndex(63);
+            tg4->setisOn(true);
+            tg4->settrackOnBackground(c(230, 140, 50));
+            tg4->settrackOnBorderColor(c(210, 120, 40));
+            page->addChild(tg4);
+            Canvas::setLeft(*tg4, sx);
+            Canvas::setTop(*tg4, sy + 164);
+
+            // Toggle: Disabled (greyed)
+            auto tg5 = make<Toggle>("Disabled switch");
+            tg5->setisEnabled(false);
+            tg5->setisOn(true);
+            page->addChild(tg5);
+            Canvas::setLeft(*tg5, sx);
+            Canvas::setTop(*tg5, sy + 200);
+
+            // Custom-sized toggle
+            auto bigLabel = make<Text>("Large toggle:", 10.5f);
+            bigLabel->setforeground(c(140, 140, 160));
+            bigLabel->setisHitTestVisible(false);
+            page->addChild(bigLabel);
+            Canvas::setLeft(*bigLabel, sx);
+            Canvas::setTop(*bigLabel, sy + 246);
+
+            auto tgBig = make<Toggle>("Wi-Fi");
+            tgBig->settabIndex(64);
+            tgBig->settrackWidth(56.0f);
+            tgBig->settrackHeight(30.0f);
+            tgBig->setthumbInset(3.0f);
+            tgBig->setfontSize(15.0f);
+            tgBig->settrackOnBackground(c(60, 180, 200));
+            tgBig->settrackOnBorderColor(c(50, 160, 180));
+            page->addChild(tgBig);
+            Canvas::setLeft(*tgBig, sx);
+            Canvas::setTop(*tgBig, sy + 266);
+
+            // Status line
+            auto statusLine = make<Text>("Flip a switch...", 10.0f);
+            statusLine->setforeground(c(110, 110, 130));
+            statusLine->setisHitTestVisible(false);
+            tgStatus = statusLine;
+            page->addChild(statusLine);
+            Canvas::setLeft(*statusLine, sx);
+            Canvas::setTop(*statusLine, sy + 310);
+
+            auto s = tgStatus;
+            tg1->setOnToggled([s](bool on) {
+                s->setforeground(gut::Color::fromRgba8(80, 200, 120));
+                s->settext(on ? "Dark mode: ON" : "Dark mode: OFF");
+            });
+            tg2->setOnToggled([s](bool on) {
+                s->setforeground(gut::Color::fromRgba8(80, 200, 120));
+                s->settext(on ? "Notifications: ON" : "Notifications: OFF");
+            });
+            tg3->setOnToggled([s](bool on) {
+                s->setforeground(gut::Color::fromRgba8(100, 160, 240));
+                s->settext(on ? "Auto-update: ON" : "Auto-update: OFF");
+            });
+            tg4->setOnToggled([s](bool on) {
+                s->setforeground(gut::Color::fromRgba8(230, 160, 80));
+                s->settext(on ? "Sound effects: ON" : "Sound effects: OFF");
+            });
+            tgBig->setOnToggled([s](bool on) {
+                s->setforeground(gut::Color::fromRgba8(60, 200, 220));
+                s->settext(on ? "Wi-Fi: ON" : "Wi-Fi: OFF");
+            });
+        }
+
+        // Vertical divider
+        {
+            auto vline = make<Panel>();
+            vline->setwidth(1);
+            vline->setheight(520);
+            vline->setbackground(c(50, 50, 62));
+            page->addChild(vline);
+            Canvas::setLeft(*vline, 350);
+            Canvas::setTop(*vline, 10);
+        }
+
+        // ── Right column: Slider ──────────────────────────────────────
+        Ref<Text> sliderStatus;
+        {
+            f32 sx = 375, sy = 15;
+
+            auto sectionLabel = make<Text>("Slider", 15.0f);
+            sectionLabel->setforeground(c(200, 200, 220));
+            sectionLabel->setisHitTestVisible(false);
+            page->addChild(sectionLabel);
+            Canvas::setLeft(*sectionLabel, sx);
+            Canvas::setTop(*sectionLabel, sy);
+
+            auto desc = make<Text>("Drag or use arrow keys. Home/End jump to extremes.", 11.0f);
+            desc->setforeground(c(120, 120, 140));
+            desc->setisHitTestVisible(false);
+            page->addChild(desc);
+            Canvas::setLeft(*desc, sx);
+            Canvas::setTop(*desc, sy + 24);
+
+            // Volume (0-100, step 1, green)
+            auto volLabel = make<Text>("Volume", 11.0f);
+            volLabel->setforeground(c(160, 160, 180));
+            volLabel->setisHitTestVisible(false);
+            page->addChild(volLabel);
+            Canvas::setLeft(*volLabel, sx);
+            Canvas::setTop(*volLabel, sy + 56);
+
+            auto vol = make<Slider>(75.0f);
+            vol->settabIndex(70);
+            vol->setminimum(0.0f);
+            vol->setmaximum(100.0f);
+            vol->setstep(1.0f);
+            vol->setshowValue(true);
+            vol->setpreferredWidth(280.0f);
+            vol->settrackFillColor(c(100, 180, 80));
+            page->addChild(vol);
+            Canvas::setLeft(*vol, sx);
+            Canvas::setTop(*vol, sy + 76);
+
+            // Brightness (0-100, step 5, yellow)
+            auto briLabel = make<Text>("Brightness", 11.0f);
+            briLabel->setforeground(c(160, 160, 180));
+            briLabel->setisHitTestVisible(false);
+            page->addChild(briLabel);
+            Canvas::setLeft(*briLabel, sx);
+            Canvas::setTop(*briLabel, sy + 108);
+
+            auto bri = make<Slider>(50.0f);
+            bri->settabIndex(71);
+            bri->setminimum(0.0f);
+            bri->setmaximum(100.0f);
+            bri->setstep(5.0f);
+            bri->setshowValue(true);
+            bri->setpreferredWidth(280.0f);
+            bri->settrackFillColor(c(240, 200, 60));
+            page->addChild(bri);
+            Canvas::setLeft(*bri, sx);
+            Canvas::setTop(*bri, sy + 128);
+
+            // Opacity (0.0-1.0, continuous, blue)
+            auto opLabel = make<Text>("Opacity  (continuous)", 11.0f);
+            opLabel->setforeground(c(160, 160, 180));
+            opLabel->setisHitTestVisible(false);
+            page->addChild(opLabel);
+            Canvas::setLeft(*opLabel, sx);
+            Canvas::setTop(*opLabel, sy + 160);
+
+            auto op = make<Slider>(0.5f);
+            op->settabIndex(72);
+            op->setshowValue(true);
+            op->setpreferredWidth(280.0f);
+            page->addChild(op);
+            Canvas::setLeft(*op, sx);
+            Canvas::setTop(*op, sy + 180);
+
+            // Temperature (–20 to 50, step 1, red)
+            auto tempLabel = make<Text>("Temperature  (\u2013 20 \u2026 50)", 11.0f);
+            tempLabel->setforeground(c(160, 160, 180));
+            tempLabel->setisHitTestVisible(false);
+            page->addChild(tempLabel);
+            Canvas::setLeft(*tempLabel, sx);
+            Canvas::setTop(*tempLabel, sy + 212);
+
+            auto temp = make<Slider>(22.0f);
+            temp->settabIndex(73);
+            temp->setminimum(-20.0f);
+            temp->setmaximum(50.0f);
+            temp->setstep(1.0f);
+            temp->setshowValue(true);
+            temp->setpreferredWidth(280.0f);
+            temp->settrackFillColor(c(220, 80, 80));
+            page->addChild(temp);
+            Canvas::setLeft(*temp, sx);
+            Canvas::setTop(*temp, sy + 232);
+
+            // Disabled slider
+            auto disLabel = make<Text>("Disabled", 11.0f);
+            disLabel->setforeground(c(120, 120, 140));
+            disLabel->setisHitTestVisible(false);
+            page->addChild(disLabel);
+            Canvas::setLeft(*disLabel, sx);
+            Canvas::setTop(*disLabel, sy + 270);
+
+            auto dis = make<Slider>(30.0f);
+            dis->setminimum(0.0f);
+            dis->setmaximum(100.0f);
+            dis->setstep(1.0f);
+            dis->setshowValue(true);
+            dis->setpreferredWidth(280.0f);
+            dis->setisEnabled(false);
+            page->addChild(dis);
+            Canvas::setLeft(*dis, sx);
+            Canvas::setTop(*dis, sy + 290);
+
+            // Status line
+            auto sLine = make<Text>("Drag a slider...", 10.0f);
+            sLine->setforeground(c(110, 110, 130));
+            sLine->setisHitTestVisible(false);
+            sliderStatus = sLine;
+            page->addChild(sLine);
+            Canvas::setLeft(*sLine, sx);
+            Canvas::setTop(*sLine, sy + 325);
+
+            auto ss = sliderStatus;
+            vol->setOnValueChanged([ss](f32 v) {
+                char buf[64]; std::snprintf(buf, sizeof(buf), "Volume: %.0f", v);
+                ss->setforeground(gut::Color::fromRgba8(100, 180, 80));
+                ss->settext(buf);
+            });
+            bri->setOnValueChanged([ss](f32 v) {
+                char buf[64]; std::snprintf(buf, sizeof(buf), "Brightness: %.0f", v);
+                ss->setforeground(gut::Color::fromRgba8(240, 200, 60));
+                ss->settext(buf);
+            });
+            op->setOnValueChanged([ss](f32 v) {
+                char buf[64]; std::snprintf(buf, sizeof(buf), "Opacity: %.2f", v);
+                ss->setforeground(gut::Color::fromRgba8(100, 160, 240));
+                ss->settext(buf);
+            });
+            temp->setOnValueChanged([ss](f32 v) {
+                char buf[64]; std::snprintf(buf, sizeof(buf), "Temperature: %.0f \u00b0C", v);
+                ss->setforeground(gut::Color::fromRgba8(220, 100, 100));
+                ss->settext(buf);
+            });
+        }
+
+        tabControl->addTab("Toggle & Slider", page);
+    }
+
     _context->setRoot(root);
 }
 
@@ -1070,7 +1352,7 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
 @implementation AppDelegate
 
 - (void)applicationDidFinishLaunching:(NSNotification*)notification {
-    NSRect frame = NSMakeRect(0, 0, 800, 700);
+    NSRect frame = NSMakeRect(0, 0, 800, 750);
 
     self.window = [[NSWindow alloc]
         initWithContentRect:frame

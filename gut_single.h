@@ -4558,6 +4558,184 @@ private:
 } // namespace gut
 
 
+// --- gut/elements/Toggle.h ---
+
+#include <functional>
+
+namespace gut {
+
+/**
+ * @brief A toggle switch control — an on/off pill-shaped slider.
+ *
+ * Similar to CheckBox semantically but rendered as a sliding switch.
+ * The thumb slides left (off) / right (on) with an animated transition.
+ *
+ * Usage:
+ *     auto sw = make<Toggle>("Dark mode");
+ *     sw->setisOn(true);
+ *     sw->setOnToggled([](bool on) { ... });
+ */
+class GUT_API Toggle : public Element {
+    GUT_OBJECT(Toggle, Element)
+
+public:
+    Toggle() { setfocusable(true); }
+    explicit Toggle(String label);
+    ~Toggle() override = default;
+
+    // -------------------------------------------------------------------------
+    // State
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(bool, isOn, false)
+
+    // -------------------------------------------------------------------------
+    // Content
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(String, label, "")
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, trackWidth, 40.0f)
+    GUT_PROPERTY(f32, trackHeight, 22.0f)
+    GUT_PROPERTY(f32, thumbInset, 2.0f)       // gap between thumb edge and track edge
+    GUT_PROPERTY(f32, fontSize, 13.0f)
+    GUT_PROPERTY(f32, spacing, 8.0f)           // gap between track and label
+
+    // Track colors
+    GUT_PROPERTY(Color, trackOffBackground, Color::fromHex(0x3C3C4A))
+    GUT_PROPERTY(Color, trackOnBackground, Color::fromRgba8(60, 180, 80, 255))
+    GUT_PROPERTY(Color, trackOffBorderColor, Color::fromHex(0x606070))
+    GUT_PROPERTY(Color, trackOnBorderColor, Color::fromRgba8(50, 160, 65, 255))
+    GUT_PROPERTY(Color, hoverBorderColor, Color::fromRgba8(100, 160, 240, 255))
+    GUT_PROPERTY(Color, focusBorderColor, Color::fromRgba8(100, 180, 255, 255))
+
+    // Thumb colors
+    GUT_PROPERTY(Color, thumbColor, Color::white())
+    GUT_PROPERTY(Color, thumbShadowColor, Color::fromRgba8(0, 0, 0, 40))
+
+    // Label
+    GUT_PROPERTY(Color, foreground, Color::fromHex(0xE0E0E0))
+    GUT_PROPERTY(Color, disabledForeground, Color::fromHex(0x808080))
+
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+
+    void setOnToggled(std::function<void(bool)> callback) { m_onToggled = std::move(callback); }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+
+private:
+    void doToggle();
+    f32 thumbRadius() const { return (trackHeight() - thumbInset() * 2.0f) * 0.5f; }
+    f32 thumbCenterY() const { return trackHeight() * 0.5f; }
+    f32 thumbOffX() const { return thumbInset() + thumbRadius(); }
+    f32 thumbOnX() const { return trackWidth() - thumbInset() - thumbRadius(); }
+
+    f32 m_thumbT{0.0f};           // 0 = off, 1 = on (for animation)
+    std::function<void(bool)> m_onToggled;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/Slider.h ---
+
+namespace gut {
+
+/**
+ * @brief A horizontal slider control for selecting a numeric value within a range.
+ *
+ * Supports continuous and stepped values, mouse drag, keyboard arrows,
+ * and optional label display.
+ */
+class Slider : public Element {
+    GUT_OBJECT(Slider, Element)
+
+public:
+    explicit Slider(f32 initialValue = 0.0f);
+
+    // -------------------------------------------------------------------------
+    // Value
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, value, 0.0f)
+    GUT_PROPERTY(f32, minimum, 0.0f)
+    GUT_PROPERTY(f32, maximum, 1.0f)
+    GUT_PROPERTY(f32, step, 0.0f)              // 0 = continuous
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, trackHeight, 4.0f)
+    GUT_PROPERTY(f32, thumbRadius, 8.0f)
+    GUT_PROPERTY(f32, preferredWidth, 200.0f)
+    GUT_PROPERTY(f32, fontSize, 12.0f)
+    GUT_PROPERTY(f32, labelSpacing, 8.0f)      // gap between slider and value label
+
+    // Track colors
+    GUT_PROPERTY(Color, trackBackground, Color::fromHex(0x3C3C4A))
+    GUT_PROPERTY(Color, trackFillColor, Color::fromRgba8(100, 160, 240, 255))
+    GUT_PROPERTY(Color, trackBorderColor, Color::fromHex(0x606070))
+
+    // Thumb colors
+    GUT_PROPERTY(Color, thumbColor, Color::white())
+    GUT_PROPERTY(Color, thumbHoverColor, Color::fromRgba8(220, 230, 255, 255))
+    GUT_PROPERTY(Color, thumbPressedColor, Color::fromRgba8(180, 200, 240, 255))
+    GUT_PROPERTY(Color, thumbBorderColor, Color::fromRgba8(150, 150, 170, 255))
+    GUT_PROPERTY(Color, thumbShadowColor, Color::fromRgba8(0, 0, 0, 40))
+
+    // Focus
+    GUT_PROPERTY(Color, focusBorderColor, Color::fromRgba8(100, 180, 255, 255))
+
+    // Disabled
+    GUT_PROPERTY(Color, disabledTrackFill, Color::fromHex(0x505060))
+    GUT_PROPERTY(Color, disabledThumbColor, Color::fromHex(0x909090))
+
+    // Show numeric value beside the slider
+    GUT_PROPERTY(bool, showValue, false)
+    GUT_PROPERTY(String, valueFormat, "{:.0f}") // ignored; we just display int-ish
+
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+
+    void setOnValueChanged(std::function<void(f32)> callback) { m_onValueChanged = std::move(callback); }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+
+private:
+    void setValueFromPosition(f32 localX);
+    f32 normalizedValue() const;
+    f32 trackLeft() const { return thumbRadius(); }
+    f32 trackRight() const { return bounds().width - thumbRadius() - valueLabelWidth(); }
+    f32 trackWidth() const { return trackRight() - trackLeft(); }
+    f32 valueLabelWidth() const;
+
+    bool m_dragging{false};
+    std::function<void(f32)> m_onValueChanged;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/DropDown.h ---
 
 
@@ -15893,6 +16071,402 @@ void RadioButton::onMouseEnter() {
 void RadioButton::onMouseLeave() {
     Element::onMouseLeave();
     setisPressed(false);
+    invalidateRender();
+}
+
+} // namespace gut
+
+
+// --- elements/Toggle.cpp ---
+
+#include <cmath>
+
+namespace gut {
+
+Toggle::Toggle(String text) {
+    setlabel(std::move(text));
+    setfocusable(true);
+}
+
+void Toggle::doToggle() {
+    setisOn(!isOn());
+    m_thumbT = isOn() ? 1.0f : 0.0f;
+    if (m_onToggled) {
+        m_onToggled(isOn());
+    }
+    invalidateRender();
+}
+
+Size2f Toggle::measureOverride(Size2f availableSize) {
+    f32 textW = 0;
+    f32 textH = trackHeight();
+
+    if (!label().empty() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                textW = face->measureWidth(label());
+                textH = std::max(textH, face->lineHeight());
+            }
+        }
+    }
+
+    f32 totalW = trackWidth() + (textW > 0 ? spacing() + textW : 0);
+    return {totalW, textH};
+}
+
+void Toggle::onRender(RenderContext& ctx) {
+    f32 tw = trackWidth();
+    f32 th = trackHeight();
+    f32 cr = th * 0.5f;   // pill-shaped: corner radius = half height
+    f32 cy = (bounds().height - th) * 0.5f;  // vertical center offset
+    Rectf track = {0, cy, tw, th};
+
+    bool on = isOn();
+    bool hovered = isHovered();
+    bool disabled = !isEnabled();
+
+    // Snap thumb t to state (will be animated later)
+    m_thumbT = on ? 1.0f : 0.0f;
+
+    // --- Track fill ---
+    Color trackBg;
+    if (disabled) {
+        Color base = on ? trackOnBackground() : trackOffBackground();
+        trackBg = Color::fromRgba8(
+            static_cast<u8>(base.r * 0.5f),
+            static_cast<u8>(base.g * 0.5f),
+            static_cast<u8>(base.b * 0.5f), base.a);
+    } else {
+        // Lerp between off and on colors based on thumb position
+        Color offBg = trackOffBackground();
+        Color onBg = trackOnBackground();
+        f32 t = m_thumbT;
+        trackBg = Color::fromRgba8(
+            static_cast<u8>(offBg.r + (onBg.r - offBg.r) * t),
+            static_cast<u8>(offBg.g + (onBg.g - offBg.g) * t),
+            static_cast<u8>(offBg.b + (onBg.b - offBg.b) * t),
+            static_cast<u8>(offBg.a + (onBg.a - offBg.a) * t));
+    }
+    ctx.fillRoundedRect(track, cr, trackBg);
+
+    // --- Track border ---
+    Color border;
+    if (isFocused()) {
+        border = focusBorderColor();
+    } else if (hovered && !disabled) {
+        border = hoverBorderColor();
+    } else {
+        border = on ? trackOnBorderColor() : trackOffBorderColor();
+    }
+    ctx.strokeRoundedRect(track, cr, border, 1.0f);
+
+    // --- Thumb ---
+    f32 tr = thumbRadius();
+    f32 tcx = thumbOffX() + m_thumbT * (thumbOnX() - thumbOffX());
+    f32 tcy = cy + thumbCenterY();
+
+    // Thumb shadow (slightly below and larger)
+    if (!disabled) {
+        ctx.fillCircle({tcx, tcy + 1.0f}, tr + 0.5f, thumbShadowColor());
+    }
+
+    // Thumb circle
+    Color tc = thumbColor();
+    if (disabled) {
+        tc = Color::fromRgba8(
+            static_cast<u8>(tc.r * 0.7f),
+            static_cast<u8>(tc.g * 0.7f),
+            static_cast<u8>(tc.b * 0.7f), tc.a);
+    }
+    ctx.fillCircle({tcx, tcy}, tr, tc);
+
+    // --- Label ---
+    if (!label().empty() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                Color fg = disabled ? disabledForeground() : foreground();
+                f32 textX = tw + spacing();
+                f32 textY = (bounds().height - face->lineHeight()) * 0.5f + face->ascender();
+                ctx.drawText(face.get(), label(), {textX, textY}, fg);
+            }
+        }
+    }
+
+    // --- Focus ring ---
+    if (isFocused()) {
+        Rectf focusRect = {-2, cy - 2, tw + 4, th + 4};
+        ctx.strokeRoundedRect(focusRect, cr + 2, focusBorderColor(), 1.5f);
+    }
+}
+
+bool Toggle::onMouseEvent(const MouseEvent& event) {
+    if (!isEnabled()) return false;
+
+    switch (event.type) {
+        case MouseEventType::ButtonDown:
+            if (event.button == MouseButton::Left) {
+                setisPressed(true);
+                return true;
+            }
+            break;
+        case MouseEventType::ButtonUp:
+            if (event.button == MouseButton::Left && isPressed()) {
+                setisPressed(false);
+                if (containsPoint(event.position)) {
+                    doToggle();
+                    clicked().emit();
+                }
+                return true;
+            }
+            break;
+        default: break;
+    }
+    return false;
+}
+
+bool Toggle::onKeyEvent(const KeyEvent& event) {
+    if (event.type == KeyEventType::KeyDown && event.key == Key::Space) {
+        doToggle();
+        clicked().emit();
+        return true;
+    }
+    return false;
+}
+
+void Toggle::onMouseEnter() {
+    Element::onMouseEnter();
+    invalidateRender();
+}
+
+void Toggle::onMouseLeave() {
+    Element::onMouseLeave();
+    setisPressed(false);
+    invalidateRender();
+}
+
+} // namespace gut
+
+
+// --- elements/Slider.cpp ---
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
+namespace gut {
+
+Slider::Slider(f32 initialValue) {
+    setvalue(initialValue);
+    setfocusable(true);
+}
+
+f32 Slider::normalizedValue() const {
+    f32 range = maximum() - minimum();
+    if (range <= 0.0f) return 0.0f;
+    return std::clamp((value() - minimum()) / range, 0.0f, 1.0f);
+}
+
+f32 Slider::valueLabelWidth() const {
+    if (!showValue()) return 0.0f;
+    return labelSpacing() + 40.0f; // space for numeric label
+}
+
+void Slider::setValueFromPosition(f32 localX) {
+    f32 tl = trackLeft();
+    f32 tw = trackWidth();
+    if (tw <= 0.0f) return;
+
+    f32 t = std::clamp((localX - tl) / tw, 0.0f, 1.0f);
+    f32 newVal = minimum() + t * (maximum() - minimum());
+
+    // Snap to step
+    if (step() > 0.0f) {
+        newVal = minimum() + std::round((newVal - minimum()) / step()) * step();
+        newVal = std::clamp(newVal, minimum(), maximum());
+    }
+
+    if (newVal != value()) {
+        setvalue(newVal);
+        if (m_onValueChanged) m_onValueChanged(value());
+        invalidateRender();
+    }
+}
+
+Size2f Slider::measureOverride(Size2f /*availableSize*/) {
+    f32 h = std::max(thumbRadius() * 2.0f, trackHeight());
+    f32 w = preferredWidth() + valueLabelWidth();
+    return {w, h};
+}
+
+void Slider::onRender(RenderContext& ctx) {
+    bool disabled = !isEnabled();
+    f32 tl = trackLeft();
+    f32 tw = trackWidth();
+    f32 th = trackHeight();
+    f32 cy = bounds().height * 0.5f;
+    f32 norm = normalizedValue();
+    f32 tr = th * 0.5f; // track corner radius
+
+    // --- Track background ---
+    Rectf trackRect = {tl, cy - th * 0.5f, tw, th};
+    ctx.fillRoundedRect(trackRect, tr, trackBackground());
+    ctx.strokeRoundedRect(trackRect, tr, trackBorderColor(), 0.5f);
+
+    // --- Filled portion ---
+    f32 fillW = tw * norm;
+    if (fillW > 0.5f) {
+        Rectf fillRect = {tl, cy - th * 0.5f, fillW, th};
+        Color fill = disabled ? disabledTrackFill() : trackFillColor();
+        ctx.fillRoundedRect(fillRect, tr, fill);
+    }
+
+    // --- Thumb ---
+    f32 thumbX = tl + tw * norm;
+    f32 thumbR = thumbRadius();
+    Point2f thumbCenter = {thumbX, cy};
+
+    // Shadow
+    ctx.fillCircle({thumbX + 0.5f, cy + 1.0f}, thumbR, thumbShadowColor());
+
+    // Thumb body
+    Color tc = disabled ? disabledThumbColor()
+             : isPressed() ? thumbPressedColor()
+             : isHovered() ? thumbHoverColor()
+             : thumbColor();
+    ctx.fillCircle(thumbCenter, thumbR, tc);
+
+    // Thumb border
+    // Use a slightly smaller circle stroke to simulate a border
+    ctx.fillCircle(thumbCenter, thumbR, tc);
+    // Draw a thin ring around thumb
+    {
+        // Approximate border: draw a circle outline using a 1px stroke fill trick
+        // Since we don't have strokeCircle, draw an outer circle in border color,
+        // then the inner fill on top
+        Color border = (isHovered() && !disabled) ? focusBorderColor() : thumbBorderColor();
+        ctx.fillCircle(thumbCenter, thumbR + 1.0f, border);
+        ctx.fillCircle(thumbCenter, thumbR - 0.5f, tc);
+    }
+
+    // --- Value label ---
+    if (showValue() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                char buf[32];
+                // Show integer if step >= 1, otherwise 1 decimal
+                if (step() >= 1.0f) {
+                    std::snprintf(buf, sizeof(buf), "%.0f", value());
+                } else {
+                    std::snprintf(buf, sizeof(buf), "%.1f", value());
+                }
+                String valStr(buf);
+                f32 lx = trackRight() + labelSpacing();
+                f32 ly = cy - face->lineHeight() * 0.5f + face->ascender();
+                Color fg = disabled ? Color::fromHex(0x808080) : Color::fromHex(0xE0E0E0);
+                ctx.drawText(face.get(), valStr, {lx, ly}, fg);
+            }
+        }
+    }
+
+    // --- Focus ring ---
+    if (isFocused()) {
+        Rectf focusRect = {tl - 3, cy - thumbR - 3, tw + 6, thumbR * 2 + 6};
+        ctx.strokeRoundedRect(focusRect, thumbR + 3, focusBorderColor(), 1.5f);
+    }
+}
+
+bool Slider::onMouseEvent(const MouseEvent& event) {
+    if (!isEnabled()) return false;
+
+    switch (event.type) {
+        case MouseEventType::ButtonDown:
+            if (event.button == MouseButton::Left) {
+                m_dragging = true;
+                setisPressed(true);
+                context()->inputManager().captureMouse(this);
+                setValueFromPosition(event.position.x);
+                return true;
+            }
+            break;
+        case MouseEventType::ButtonUp:
+            if (event.button == MouseButton::Left && m_dragging) {
+                m_dragging = false;
+                setisPressed(false);
+                context()->inputManager().releaseMouse();
+                invalidateRender();
+                return true;
+            }
+            break;
+        case MouseEventType::Move:
+            if (m_dragging) {
+                setValueFromPosition(event.position.x);
+                return true;
+            }
+            break;
+        default: break;
+    }
+    return false;
+}
+
+bool Slider::onKeyEvent(const KeyEvent& event) {
+    if (event.type != KeyEventType::KeyDown) return false;
+
+    f32 s = step() > 0.0f ? step() : (maximum() - minimum()) * 0.01f;
+
+    switch (event.key) {
+        case Key::Right:
+        case Key::Up: {
+            f32 newVal = std::min(value() + s, maximum());
+            if (newVal != value()) {
+                setvalue(newVal);
+                if (m_onValueChanged) m_onValueChanged(value());
+                invalidateRender();
+            }
+            return true;
+        }
+        case Key::Left:
+        case Key::Down: {
+            f32 newVal = std::max(value() - s, minimum());
+            if (newVal != value()) {
+                setvalue(newVal);
+                if (m_onValueChanged) m_onValueChanged(value());
+                invalidateRender();
+            }
+            return true;
+        }
+        case Key::Home:
+            if (value() != minimum()) {
+                setvalue(minimum());
+                if (m_onValueChanged) m_onValueChanged(value());
+                invalidateRender();
+            }
+            return true;
+        case Key::End:
+            if (value() != maximum()) {
+                setvalue(maximum());
+                if (m_onValueChanged) m_onValueChanged(value());
+                invalidateRender();
+            }
+            return true;
+        default: break;
+    }
+    return false;
+}
+
+void Slider::onMouseEnter() {
+    Element::onMouseEnter();
+    invalidateRender();
+}
+
+void Slider::onMouseLeave() {
+    Element::onMouseLeave();
+    if (!m_dragging) setisPressed(false);
     invalidateRender();
 }
 

@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 43 done, 10 partial, 10 missing** out of 63 core features.
+**Score: 45 done, 10 partial, 9 missing** out of 63 core features.
 
 ---
 
@@ -76,8 +76,8 @@
 - [x] TextBox / TextInput — single-line editing, caret, selection, placeholder, password, submit
 - [x] CheckBox — toggle with label, checked/unchecked, disabled state, keyboard (Space)
 - [x] RadioButton — mutually exclusive groups, auto-uncheck siblings, keyboard (Space)
-- [ ] Toggle / Switch
-- [ ] Slider
+- [x] Toggle / Switch
+- [x] Slider — horizontal, value/min/max/step, mouse drag (captureMouse), keyboard arrows, show value label
 - [x] DropDown (selection menu, scroll, auto up/down direction)
 - [ ] ProgressBar
 - [ ] Tooltip
