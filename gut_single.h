@@ -3700,6 +3700,7 @@ public:
     GUT_PROPERTY(bool, isEnabled, true)
     GUT_PROPERTY(i32, zIndex, 0)
     GUT_PROPERTY(bool, clipToBounds, false)
+    GUT_PROPERTY(CursorType, cursor, CursorType::Arrow)
     
     // -------------------------------------------------------------------------
     // Layout results (read-only after layout)
@@ -4987,6 +4988,166 @@ private:
 } // namespace gut
 
 
+// --- gut/elements/Table.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief A sortable, scrollable data table.
+ *
+ * The Table displays rows and columns of text data with clickable column
+ * headers for sorting.  Sorting is NOT done internally — instead, a callback
+ * fires when a column header is clicked, letting the application re-order the
+ * data and call setRows() with the new list.
+ *
+ * Features:
+ *   - Scrollable body (mouse wheel) for large row counts
+ *   - Column-header click → onSortRequested(columnIndex, ascending)
+ *   - Row selection → onRowSelected(rowIndex)
+ *   - Row hover highlighting
+ *   - Sort indicator arrow on the active sort column
+ *   - Styled header bar, alternating row colors, selection highlight
+ *
+ * Usage:
+ *     auto table = make<Table>();
+ *     table->addColumn("Name", 200);
+ *     table->addColumn("Ping", 80);
+ *     table->addColumn("Players", 100);
+ *     table->setRows({ {"Realm 1", "32 ms", "1024"}, ... });
+ *     table->setOnSortRequested([](usize col, bool asc) { ... });
+ *     table->setOnRowSelected([](isize row) { ... });
+ */
+class GUT_API Table : public Element {
+    GUT_OBJECT(Table, Element)
+
+public:
+    Table();
+    ~Table() override = default;
+
+    // -------------------------------------------------------------------------
+    // Columns
+    // -------------------------------------------------------------------------
+
+    struct Column {
+        String title;
+        f32 width{120.0f};
+    };
+
+    void addColumn(String title, f32 width = 120.0f);
+    void clearColumns();
+    usize columnCount() const { return m_columns.size(); }
+    const Column& columnAt(usize index) const { return m_columns[index]; }
+
+    // -------------------------------------------------------------------------
+    // Data  (each row is a vector of strings, one per column)
+    // -------------------------------------------------------------------------
+
+    using Row = std::vector<String>;
+    void setRows(std::vector<Row> rows);
+    void clearRows();
+    usize rowCount() const { return m_rows.size(); }
+    const Row& rowAt(usize index) const { return m_rows[index]; }
+
+    // -------------------------------------------------------------------------
+    // Selection
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(isize, selectedRow, -1)
+    void selectRow(isize index);
+
+    // -------------------------------------------------------------------------
+    // Sort state (visual only — the app provides sorted data)
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(isize, sortColumn, -1)
+    GUT_PROPERTY(bool, sortAscending, true)
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, rowHeight, 28.0f)
+    GUT_PROPERTY(f32, headerHeight, 30.0f)
+    GUT_PROPERTY(f32, fontSize, 12.0f)
+    GUT_PROPERTY(f32, headerFontSize, 12.0f)
+    GUT_PROPERTY(f32, cellPaddingH, 10.0f)
+
+    // Colors — header
+    GUT_PROPERTY(Color, headerBackground, Color::fromHex(0x2A2A3A))
+    GUT_PROPERTY(Color, headerForeground, Color::fromHex(0xC0C0D8))
+    GUT_PROPERTY(Color, headerBorderColor, Color::fromHex(0x404058))
+    GUT_PROPERTY(Color, headerHoverBackground, Color::fromRgba8(55, 55, 75, 255))
+    GUT_PROPERTY(Color, sortArrowColor, Color::fromRgba8(120, 180, 255, 255))
+
+    // Colors — body
+    GUT_PROPERTY(Color, rowBackground, Color::fromHex(0x1E1E2A))
+    GUT_PROPERTY(Color, rowAlternateBackground, Color::fromHex(0x232332))
+    GUT_PROPERTY(Color, rowHoverBackground, Color::fromRgba8(50, 50, 68, 255))
+    GUT_PROPERTY(Color, rowSelectedBackground, Color::fromRgba8(50, 100, 200, 255))
+    GUT_PROPERTY(Color, cellForeground, Color::fromHex(0xD0D0E0))
+    GUT_PROPERTY(Color, gridLineColor, Color::fromRgba8(50, 50, 62, 100))
+
+    // Colors — scrollbar
+    GUT_PROPERTY(Color, scrollbarTrackColor, Color::fromRgba8(40, 40, 55, 80))
+    GUT_PROPERTY(Color, scrollbarThumbColor, Color::fromRgba8(100, 100, 120, 160))
+
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+
+    /** Called when a column header is clicked.  App should sort and call setRows(). */
+    void setOnSortRequested(std::function<void(usize columnIndex, bool ascending)> cb) {
+        m_onSortRequested = std::move(cb);
+    }
+
+    /** Called when a row is selected (clicked). -1 if deselected. */
+    void setOnRowSelected(std::function<void(isize rowIndex)> cb) {
+        m_onRowSelected = std::move(cb);
+    }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+
+private:
+    f32 totalColumnsWidth() const;
+    f32 totalRowsHeight() const { return static_cast<f32>(m_rows.size()) * rowHeight(); }
+    f32 bodyHeight() const { return bounds().height - headerHeight(); }
+    f32 maxScrollOffset() const { return std::max(0.0f, totalRowsHeight() - bodyHeight()); }
+    bool needsScrollbar() const { return totalRowsHeight() > bodyHeight(); }
+    isize rowIndexAtY(f32 localY) const;       // -1 if in header or out of range
+    isize columnIndexAtX(f32 localX) const;
+
+    static constexpr f32 kScrollbarWidth = 8.0f;
+    static constexpr f32 kSortArrowSize  = 6.0f;
+
+    std::vector<Column> m_columns;
+    std::vector<Row> m_rows;
+
+    f32 m_scrollOffset{0.0f};
+    isize m_hoveredRow{-1};
+    isize m_hoveredHeaderCol{-1};
+
+    // Scrollbar thumb drag
+    bool m_draggingThumb{false};
+    f32 m_dragStartY{0.0f};
+    f32 m_dragStartScroll{0.0f};
+
+    Rectf scrollbarThumbRect() const;
+
+    std::function<void(usize, bool)> m_onSortRequested;
+    std::function<void(isize)> m_onRowSelected;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/Image.h ---
 
 
@@ -5485,6 +5646,35 @@ public:
      * @brief Get the total elapsed time since context creation.
      */
     f64 totalTime() const { return m_totalTime; }
+
+    // -------------------------------------------------------------------------
+    // Cursor
+    // -------------------------------------------------------------------------
+
+    /**
+     * @brief Set a callback that is invoked whenever the cursor style should change.
+     * The platform layer should map CursorType to native cursors (e.g., NSCursor).
+     */
+    void setOnCursorChanged(std::function<void(CursorType)> callback) {
+        m_onCursorChanged = std::move(callback);
+    }
+
+    /**
+     * @brief Get the current cursor type.
+     */
+    CursorType currentCursor() const { return m_currentCursor; }
+
+    /**
+     * @brief Notify that the cursor should change (called by InputManager).
+     */
+    void notifyCursorChanged(CursorType cursor) {
+        if (cursor != m_currentCursor) {
+            m_currentCursor = cursor;
+            if (m_onCursorChanged) {
+                m_onCursorChanged(cursor);
+            }
+        }
+    }
     
     // -------------------------------------------------------------------------
     // Font loading
@@ -5531,6 +5721,10 @@ private:
     Size2f m_size{};
     f64 m_totalTime{0.0};
     bool m_layoutDirty{true};
+
+    // Cursor
+    CursorType m_currentCursor{CursorType::Arrow};
+    std::function<void(CursorType)> m_onCursorChanged;
 
     // Overlay render callbacks (popups, tooltips, etc.)
     std::vector<std::pair<Element*, std::function<void(RenderContext&)>>> m_overlays;
@@ -12435,6 +12629,14 @@ void InputManager::updateHoveredElement() {
         
         m_hoveredElement = newHovered;
     }
+
+    // Resolve cursor from the effective target (captured or hovered)
+    Element* cursorTarget = m_capturedElement ? m_capturedElement : m_hoveredElement;
+    CursorType resolvedCursor = CursorType::Arrow;
+    if (cursorTarget) {
+        resolvedCursor = cursorTarget->cursor();
+    }
+    m_context.notifyCursorChanged(resolvedCursor);
 }
 
 MouseEvent InputManager::createMouseEvent(MouseEventType type, MouseButton button) {
@@ -15669,6 +15871,7 @@ Button::Button(String buttonLabel) {
     setlabel(std::move(buttonLabel));
     setfocusable(true);
     setpadding(Thickness{8, 4, 8, 4});
+    setcursor(CursorType::Hand);
 }
 
 Button::Button(String buttonLabel, std::function<void()> onClick)
@@ -15677,6 +15880,7 @@ Button::Button(String buttonLabel, std::function<void()> onClick)
     setlabel(std::move(buttonLabel));
     setfocusable(true);
     setpadding(Thickness{8, 4, 8, 4});
+    setcursor(CursorType::Hand);
 }
 
 void Button::setContent(Ref<Element> content) {
@@ -15848,6 +16052,7 @@ namespace gut {
 CheckBox::CheckBox(String text) {
     setlabel(std::move(text));
     setfocusable(true);
+    setcursor(CursorType::Hand);
 }
 
 void CheckBox::toggle() {
@@ -15989,6 +16194,7 @@ RadioButton::RadioButton(String text, String group) {
     setlabel(std::move(text));
     setgroupName(std::move(group));
     setfocusable(true);
+    setcursor(CursorType::Hand);
 }
 
 void RadioButton::uncheckSiblings() {
@@ -16142,6 +16348,7 @@ namespace gut {
 Toggle::Toggle(String text) {
     setlabel(std::move(text));
     setfocusable(true);
+    setcursor(CursorType::Hand);
 }
 
 void Toggle::doToggle() {
@@ -16318,6 +16525,7 @@ namespace gut {
 Slider::Slider(f32 initialValue) {
     setvalue(initialValue);
     setfocusable(true);
+    setcursor(CursorType::Hand);
 }
 
 f32 Slider::normalizedValue() const {
@@ -16654,6 +16862,7 @@ namespace gut {
 
 DropDown::DropDown() {
     setfocusable(true);
+    setcursor(CursorType::Hand);
 }
 
 // ---- Item management --------------------------------------------------------
@@ -17350,6 +17559,436 @@ bool TabControl::onKeyEvent(const KeyEvent& event) {
 } // namespace gut
 
 
+// --- elements/Table.cpp ---
+
+#include <algorithm>
+#include <cstdio>
+
+namespace gut {
+
+Table::Table() {
+    setfocusable(true);
+    setcursor(CursorType::Arrow);
+}
+
+// ---- Columns / Rows ---------------------------------------------------------
+
+void Table::addColumn(String title, f32 width) {
+    m_columns.push_back({std::move(title), width});
+    invalidateLayout();
+    invalidateRender();
+}
+
+void Table::clearColumns() {
+    m_columns.clear();
+    invalidateLayout();
+    invalidateRender();
+}
+
+void Table::setRows(std::vector<Row> rows) {
+    m_rows = std::move(rows);
+    m_scrollOffset = std::clamp(m_scrollOffset, 0.0f, maxScrollOffset());
+    invalidateRender();
+}
+
+void Table::clearRows() {
+    m_rows.clear();
+    setselectedRow(-1);
+    m_scrollOffset = 0.0f;
+    invalidateRender();
+}
+
+void Table::selectRow(isize index) {
+    if (index < -1 || index >= static_cast<isize>(m_rows.size())) return;
+    setselectedRow(index);
+    if (m_onRowSelected) m_onRowSelected(index);
+    invalidateRender();
+}
+
+// ---- Geometry helpers -------------------------------------------------------
+
+f32 Table::totalColumnsWidth() const {
+    f32 w = 0;
+    for (auto& col : m_columns) w += col.width;
+    return w;
+}
+
+isize Table::rowIndexAtY(f32 localY) const {
+    f32 bodyTop = headerHeight();
+    if (localY < bodyTop) return -1;
+    f32 yInBody = localY - bodyTop + m_scrollOffset;
+    isize idx = static_cast<isize>(yInBody / rowHeight());
+    if (idx < 0 || idx >= static_cast<isize>(m_rows.size())) return -1;
+    return idx;
+}
+
+isize Table::columnIndexAtX(f32 localX) const {
+    f32 cx = 0;
+    for (usize i = 0; i < m_columns.size(); ++i) {
+        cx += m_columns[i].width;
+        if (localX < cx) return static_cast<isize>(i);
+    }
+    return -1;
+}
+
+// ---- Layout -----------------------------------------------------------------
+
+Size2f Table::measureOverride(Size2f availableSize) {
+    f32 w = (width() == width()) ? width() : totalColumnsWidth() + (needsScrollbar() ? kScrollbarWidth : 0);
+    f32 h = (height() == height()) ? height() : headerHeight() + totalRowsHeight();
+    return {w, h};
+}
+
+// ---- Render -----------------------------------------------------------------
+
+void Table::onRender(RenderContext& ctx) {
+    f32 bw = bounds().width;
+    f32 bh = bounds().height;
+    f32 hdrH = headerHeight();
+    f32 bodyH = bh - hdrH;
+    bool scroll = needsScrollbar();
+    f32 contentW = scroll ? bw - kScrollbarWidth : bw;
+
+    Font* font = context() ? context()->defaultFont() : nullptr;
+    Ref<FontFace> hdrFace, cellFace;
+    if (font) {
+        hdrFace = font->getFace(headerFontSize());
+        cellFace = font->getFace(fontSize());
+    }
+
+    // ---- Header ----
+    ctx.fillRect({0, 0, bw, hdrH}, headerBackground());
+
+    {
+        f32 cx = 0;
+        for (usize ci = 0; ci < m_columns.size(); ++ci) {
+            const auto& col = m_columns[ci];
+            f32 cw = col.width;
+
+            // Hover
+            if (static_cast<isize>(ci) == m_hoveredHeaderCol) {
+                ctx.fillRect({cx, 0, cw, hdrH}, headerHoverBackground());
+            }
+
+            // Header text
+            if (hdrFace) {
+                f32 textY = (hdrH - hdrFace->lineHeight()) * 0.5f + hdrFace->ascender();
+                ctx.save();
+                ctx.pushClip({cx, 0, cw - cellPaddingH(), hdrH});
+                ctx.drawText(hdrFace.get(), col.title, {cx + cellPaddingH(), textY}, headerForeground());
+                ctx.popClip();
+                ctx.restore();
+            }
+
+            // Sort indicator
+            if (sortColumn() == static_cast<isize>(ci)) {
+                f32 arrowX = cx + cw - cellPaddingH() - kSortArrowSize;
+                f32 arrowCY = hdrH * 0.5f;
+                if (sortAscending()) {
+                    // Up arrow  ▲
+                    ctx.drawLine({arrowX, arrowCY + kSortArrowSize * 0.35f},
+                                 {arrowX + kSortArrowSize * 0.5f, arrowCY - kSortArrowSize * 0.35f},
+                                 sortArrowColor(), 1.5f);
+                    ctx.drawLine({arrowX + kSortArrowSize * 0.5f, arrowCY - kSortArrowSize * 0.35f},
+                                 {arrowX + kSortArrowSize, arrowCY + kSortArrowSize * 0.35f},
+                                 sortArrowColor(), 1.5f);
+                } else {
+                    // Down arrow  ▼
+                    ctx.drawLine({arrowX, arrowCY - kSortArrowSize * 0.35f},
+                                 {arrowX + kSortArrowSize * 0.5f, arrowCY + kSortArrowSize * 0.35f},
+                                 sortArrowColor(), 1.5f);
+                    ctx.drawLine({arrowX + kSortArrowSize * 0.5f, arrowCY + kSortArrowSize * 0.35f},
+                                 {arrowX + kSortArrowSize, arrowCY - kSortArrowSize * 0.35f},
+                                 sortArrowColor(), 1.5f);
+                }
+            }
+
+            // Column separator
+            if (ci + 1 < m_columns.size()) {
+                ctx.drawLine({cx + cw, 2.0f}, {cx + cw, hdrH - 2.0f}, headerBorderColor(), 1.0f);
+            }
+
+            cx += cw;
+        }
+    }
+
+    // Header bottom border
+    ctx.fillRect({0, hdrH - 1.0f, bw, 1.0f}, headerBorderColor());
+
+    // ---- Body (clipped) ----
+    ctx.save();
+    ctx.pushClip({0, hdrH, contentW, bodyH});
+
+    f32 rh = rowHeight();
+    isize firstVisible = static_cast<isize>(m_scrollOffset / rh);
+    isize lastVisible = static_cast<isize>((m_scrollOffset + bodyH) / rh);
+    lastVisible = std::min(lastVisible, static_cast<isize>(m_rows.size()) - 1);
+
+    for (isize ri = firstVisible; ri <= lastVisible; ++ri) {
+        f32 ry = hdrH + static_cast<f32>(ri) * rh - m_scrollOffset;
+
+        // Row background — alternating + hover + selection
+        Color bg = (ri % 2 == 0) ? rowBackground() : rowAlternateBackground();
+        if (ri == m_hoveredRow) bg = rowHoverBackground();
+        if (ri == selectedRow()) bg = rowSelectedBackground();
+        ctx.fillRect({0, ry, contentW, rh}, bg);
+
+        // Cells
+        if (cellFace && ri < static_cast<isize>(m_rows.size())) {
+            const auto& row = m_rows[static_cast<usize>(ri)];
+            f32 cx = 0;
+            for (usize ci = 0; ci < m_columns.size(); ++ci) {
+                f32 cw = m_columns[ci].width;
+                if (ci < row.size()) {
+                    f32 textY = ry + (rh - cellFace->lineHeight()) * 0.5f + cellFace->ascender();
+                    ctx.save();
+                    ctx.pushClip({cx, ry, cw - 2.0f, rh});
+                    ctx.drawText(cellFace.get(), row[ci], {cx + cellPaddingH(), textY}, cellForeground());
+                    ctx.popClip();
+                    ctx.restore();
+                }
+                cx += cw;
+            }
+        }
+
+        // Grid line below row
+        ctx.fillRect({0, ry + rh - 1.0f, contentW, 1.0f}, gridLineColor());
+    }
+
+    ctx.popClip();
+    ctx.restore();
+
+    // ---- Scrollbar ----
+    if (scroll) {
+        f32 sbX = bw - kScrollbarWidth;
+        f32 sbY = hdrH;
+        f32 sbH = bodyH;
+
+        // Track
+        ctx.fillRect({sbX, sbY, kScrollbarWidth, sbH}, scrollbarTrackColor());
+
+        // Thumb
+        f32 viewRatio = bodyH / totalRowsHeight();
+        f32 thumbH = std::max(20.0f, sbH * viewRatio);
+        f32 scrollMax = maxScrollOffset();
+        f32 scrollRatio = (scrollMax > 0) ? m_scrollOffset / scrollMax : 0.0f;
+        f32 thumbY = sbY + scrollRatio * (sbH - thumbH);
+        ctx.fillRoundedRect({sbX, thumbY, kScrollbarWidth, thumbH},
+                            kScrollbarWidth * 0.5f, scrollbarThumbColor());
+    }
+}
+
+// ---- Mouse ------------------------------------------------------------------
+
+Rectf Table::scrollbarThumbRect() const {
+    f32 bw = bounds().width;
+    f32 hdrH = headerHeight();
+    f32 bH = bodyHeight();
+    f32 sbX = bw - kScrollbarWidth;
+    f32 viewRatio = bH / totalRowsHeight();
+    f32 thumbH = std::max(20.0f, bH * viewRatio);
+    f32 scrollMax = maxScrollOffset();
+    f32 scrollRatio = (scrollMax > 0) ? m_scrollOffset / scrollMax : 0.0f;
+    f32 thumbY = hdrH + scrollRatio * (bH - thumbH);
+    return {sbX, thumbY, kScrollbarWidth, thumbH};
+}
+
+bool Table::onMouseEvent(const MouseEvent& event) {
+    if (!isEnabled()) return false;
+
+    switch (event.type) {
+        case MouseEventType::ButtonDown: {
+            if (event.button != MouseButton::Left) break;
+
+            // Scrollbar thumb grab
+            if (needsScrollbar()) {
+                Rectf thumb = scrollbarThumbRect();
+                if (event.position.x >= thumb.x && event.position.x < thumb.x + thumb.width &&
+                    event.position.y >= thumb.y && event.position.y < thumb.y + thumb.height) {
+                    m_draggingThumb = true;
+                    m_dragStartY = event.position.y;
+                    m_dragStartScroll = m_scrollOffset;
+                    if (context()) context()->inputManager().captureMouse(this);
+                    return true;
+                }
+                // Click in scrollbar track (but not on thumb) → jump
+                f32 sbX = bounds().width - kScrollbarWidth;
+                if (event.position.x >= sbX && event.position.y >= headerHeight()) {
+                    f32 bH = bodyHeight();
+                    f32 viewRatio = bH / totalRowsHeight();
+                    f32 thumbH = std::max(20.0f, bH * viewRatio);
+                    f32 clickRatio = (event.position.y - headerHeight() - thumbH * 0.5f) / (bH - thumbH);
+                    clickRatio = std::clamp(clickRatio, 0.0f, 1.0f);
+                    m_scrollOffset = clickRatio * maxScrollOffset();
+                    invalidateRender();
+                    return true;
+                }
+            }
+
+            // Header click → sort
+            if (event.position.y < headerHeight()) {
+                isize col = columnIndexAtX(event.position.x);
+                if (col >= 0) {
+                    bool asc = (sortColumn() == col) ? !sortAscending() : true;
+                    setsortColumn(col);
+                    setsortAscending(asc);
+                    if (m_onSortRequested)
+                        m_onSortRequested(static_cast<usize>(col), asc);
+                    invalidateRender();
+                    return true;
+                }
+            }
+
+            // Body click → select row
+            isize row = rowIndexAtY(event.position.y);
+            if (row >= 0) {
+                selectRow(row);
+                return true;
+            }
+            break;
+        }
+
+        case MouseEventType::ButtonUp: {
+            if (event.button == MouseButton::Left && m_draggingThumb) {
+                m_draggingThumb = false;
+                if (context()) context()->inputManager().releaseMouse();
+                return true;
+            }
+            break;
+        }
+
+        case MouseEventType::Move: {
+            // Scrollbar thumb drag
+            if (m_draggingThumb) {
+                f32 bH = bodyHeight();
+                f32 viewRatio = bH / totalRowsHeight();
+                f32 thumbH = std::max(20.0f, bH * viewRatio);
+                f32 trackRange = bH - thumbH;
+                if (trackRange > 0) {
+                    f32 dy = event.position.y - m_dragStartY;
+                    f32 scrollDelta = (dy / trackRange) * maxScrollOffset();
+                    m_scrollOffset = std::clamp(m_dragStartScroll + scrollDelta, 0.0f, maxScrollOffset());
+                    invalidateRender();
+                }
+                return true;
+            }
+
+            // Header hover
+            isize newHdrCol = -1;
+            if (event.position.y < headerHeight()) {
+                newHdrCol = columnIndexAtX(event.position.x);
+            }
+            if (newHdrCol != m_hoveredHeaderCol) {
+                m_hoveredHeaderCol = newHdrCol;
+                invalidateRender();
+            }
+
+            // Row hover
+            isize newRow = rowIndexAtY(event.position.y);
+            if (newRow != m_hoveredRow) {
+                m_hoveredRow = newRow;
+                invalidateRender();
+            }
+            break;
+        }
+
+        case MouseEventType::Wheel: {
+            if (!needsScrollbar()) break;
+            m_scrollOffset -= event.delta.y;
+            m_scrollOffset = std::clamp(m_scrollOffset, 0.0f, maxScrollOffset());
+            invalidateRender();
+            return true;
+        }
+
+        default:
+            break;
+    }
+    return false;
+}
+
+// ---- Keyboard ---------------------------------------------------------------
+
+bool Table::onKeyEvent(const KeyEvent& event) {
+    if (event.type != KeyEventType::KeyDown) return false;
+    isize count = static_cast<isize>(m_rows.size());
+    if (count == 0) return false;
+
+    switch (event.key) {
+        case Key::Up: {
+            isize next = selectedRow() - 1;
+            if (next < 0) next = 0;
+            selectRow(next);
+            // Scroll to keep visible
+            f32 ry = static_cast<f32>(next) * rowHeight();
+            if (ry < m_scrollOffset) m_scrollOffset = ry;
+            invalidateRender();
+            return true;
+        }
+        case Key::Down: {
+            isize next = selectedRow() + 1;
+            if (next >= count) next = count - 1;
+            selectRow(next);
+            f32 ryBottom = static_cast<f32>(next + 1) * rowHeight();
+            if (ryBottom > m_scrollOffset + bodyHeight()) {
+                m_scrollOffset = ryBottom - bodyHeight();
+            }
+            invalidateRender();
+            return true;
+        }
+        case Key::Home: {
+            selectRow(0);
+            m_scrollOffset = 0;
+            invalidateRender();
+            return true;
+        }
+        case Key::End: {
+            selectRow(count - 1);
+            m_scrollOffset = maxScrollOffset();
+            invalidateRender();
+            return true;
+        }
+        case Key::PageUp: {
+            f32 page = bodyHeight();
+            isize rows = static_cast<isize>(page / rowHeight());
+            isize next = std::max<isize>(0, selectedRow() - rows);
+            selectRow(next);
+            m_scrollOffset = std::max(0.0f, m_scrollOffset - page);
+            invalidateRender();
+            return true;
+        }
+        case Key::PageDown: {
+            f32 page = bodyHeight();
+            isize rows = static_cast<isize>(page / rowHeight());
+            isize next = std::min<isize>(count - 1, selectedRow() + rows);
+            selectRow(next);
+            m_scrollOffset = std::min(maxScrollOffset(), m_scrollOffset + page);
+            invalidateRender();
+            return true;
+        }
+        default:
+            break;
+    }
+    return false;
+}
+
+// ---- Mouse enter / leave ----------------------------------------------------
+
+void Table::onMouseEnter() {
+    Element::onMouseEnter();
+}
+
+void Table::onMouseLeave() {
+    if (m_hoveredRow != -1 || m_hoveredHeaderCol != -1) {
+        m_hoveredRow = -1;
+        m_hoveredHeaderCol = -1;
+        invalidateRender();
+    }
+    Element::onMouseLeave();
+}
+
+} // namespace gut
+
+
 // --- elements/Image.cpp ---
 
 #include <cmath>
@@ -17899,6 +18538,7 @@ namespace gut {
 TextBox::TextBox() {
     setfocusable(true);
     setpadding(Thickness{6, 4, 6, 4});
+    setcursor(CursorType::IBeam);
 }
 
 TextBox::TextBox(String initialText) {
@@ -17906,6 +18546,7 @@ TextBox::TextBox(String initialText) {
     m_caretPos = static_cast<i32>(text().size());
     setfocusable(true);
     setpadding(Thickness{6, 4, 6, 4});
+    setcursor(CursorType::IBeam);
 }
 
 void TextBox::setCaretPosition(i32 pos) {

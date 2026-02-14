@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 46 done, 10 partial, 9 missing** out of 63 core features.
+**Score: 48 done, 9 partial, 9 missing** out of 63 core features.
 
 ---
 
@@ -64,7 +64,7 @@
 - [x] Hit testing — zIndex-sorted
 - [x] isHitTestVisible
 - [ ] Mouse drag — capture exists, no general drag-and-drop API
-- [ ] Cursor styles — enum declared, not connected to OS
+- [x] Cursor styles — Element.cursor property, Context callback, NSCursor mapped on macOS
 - [~] Clipboard — TextBox uses NSPasteboard; no general API yet
 - [ ] IME input — CJK composition support
 - [ ] Keyboard shortcuts / accelerators — global and scoped bindings
@@ -80,6 +80,7 @@
 - [x] Slider — horizontal, value/min/max/step, mouse drag (captureMouse), keyboard arrows, show value label
 - [x] DropDown (selection menu, scroll, auto up/down direction)
 - [x] ProgressBar — determinate (0–100%), indeterminate pulse, % in bar, label below, themed colours
+- [x] Table — scrollable data table, clickable column headers with sort callback, row selection, keyboard nav
 - [ ] Tooltip
 - [ ] ContextMenu
 - [x] TabControl

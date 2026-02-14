@@ -176,7 +176,7 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         Canvas::setLeft(*title, 30);
         Canvas::setTop(*title, 24);
 
-        auto subtitle = make<Text>("Interactive control showcase  \u2014  TextBox, Button, CheckBox, RadioButton, Toggle, Slider, ProgressBar, DropDown, TabControl", 11.0f);
+        auto subtitle = make<Text>("Interactive control showcase  \u2014  TextBox, Button, CheckBox, RadioButton, Toggle, Slider, ProgressBar, DropDown, TabControl, Table", 11.0f);
         subtitle->setforeground(c(130, 130, 150));
         subtitle->setisHitTestVisible(false);
         root->addChild(subtitle);
@@ -1329,7 +1329,145 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         tabControl->addTab("ProgressBar", page);
     }
 
+    // =====================================================================
+    // TAB 5 — "Table"
+    // =====================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(W - 40);
+        page->setheight(H - 95 - 34);
+
+        f32 sx = 20, sy = 15;
+
+        auto sectionLabel = make<Text>("Server / Realm Browser", 15.0f);
+        sectionLabel->setforeground(c(200, 200, 220));
+        sectionLabel->setisHitTestVisible(false);
+        page->addChild(sectionLabel);
+        Canvas::setLeft(*sectionLabel, sx);
+        Canvas::setTop(*sectionLabel, sy);
+
+        auto desc = make<Text>("Click column headers to sort.  Arrow keys, Home/End, PgUp/PgDn navigate.", 11.0f);
+        desc->setforeground(c(120, 120, 140));
+        desc->setisHitTestVisible(false);
+        page->addChild(desc);
+        Canvas::setLeft(*desc, sx);
+        Canvas::setTop(*desc, sy + 24);
+
+        auto table = make<Table>();
+        table->settabIndex(90);
+        table->setwidth(W - 80);
+        table->setheight(H - 95 - 34 - 100);
+        table->addColumn("Server", 200);
+        table->addColumn("Region", 100);
+        table->addColumn("Ping", 70);
+        table->addColumn("Players", 80);
+        table->addColumn("Status", 90);
+        table->addColumn("Type", 100);
+
+        // Seed with some data
+        using Row = Table::Row;
+        std::vector<Row> servers = {
+            {"Stormwind",      "US-East",  "28 ms",  "3214",  "Online",  "PvE"},
+            {"Darkspear",      "US-West",  "45 ms",  "1820",  "Online",  "PvP"},
+            {"Ragnaros",       "SA",       "112 ms", "2405",  "Online",  "PvP"},
+            {"Frostmourne",    "OCE",      "180 ms", "987",   "Online",  "PvP"},
+            {"Silvermoon",     "EU-West",  "62 ms",  "4102",  "Online",  "PvE"},
+            {"Draenor",        "EU-West",  "58 ms",  "3850",  "Full",    "PvE"},
+            {"Blackrock",      "US-East",  "32 ms",  "2200",  "Online",  "PvP"},
+            {"Tichondrius",    "US-West",  "41 ms",  "2980",  "Online",  "PvP"},
+            {"Barthilas",      "OCE",      "175 ms", "1120",  "Online",  "PvP"},
+            {"Kel'Thuzad",     "US-East",  "30 ms",  "1560",  "Online",  "PvP"},
+            {"Illidan",        "US-East",  "35 ms",  "4200",  "Full",    "PvP"},
+            {"Proudmoore",     "US-West",  "48 ms",  "2600",  "Online",  "PvE"},
+            {"Arthas",         "US-East",  "29 ms",  "1340",  "Online",  "PvP"},
+            {"Zul'jin",        "US-East",  "31 ms",  "1890",  "Online",  "PvE"},
+            {"Thrall",         "US-East",  "27 ms",  "2150",  "Online",  "PvE"},
+            {"Archimonde",     "EU-West",  "65 ms",  "2800",  "Online",  "PvP"},
+            {"Hyjal",          "EU-West",  "70 ms",  "3100",  "Online",  "PvE"},
+            {"Aegwynn",        "EU-West",  "68 ms",  "920",   "Low",     "PvP"},
+            {"Cho'gall",       "US-East",  "33 ms",  "640",   "Low",     "PvP"},
+            {"Kilrogg",        "EU-West",  "72 ms",  "1450",  "Online",  "PvE"},
+            {"Thunderhorn",    "US-East",  "26 ms",  "1100",  "Online",  "PvE"},
+            {"Bonechewer",     "US-East",  "34 ms",  "580",   "Low",     "PvP"},
+            {"Burning Legion", "US-East",  "31 ms",  "770",   "Low",     "PvP"},
+            {"Cenarius",       "US-West",  "44 ms",  "1650",  "Online",  "PvE"},
+            {"Dalaran",        "EU-West",  "60 ms",  "3500",  "Online",  "PvE"},
+            {"Earthen Ring",   "US-East",  "29 ms",  "950",   "Online",  "RP"},
+            {"Feathermoon",    "US-West",  "47 ms",  "820",   "Online",  "RP"},
+            {"Garona",         "US-East",  "30 ms",  "1280",  "Online",  "PvE"},
+            {"Hellscream",     "US-East",  "28 ms",  "1670",  "Online",  "PvE"},
+            {"Kirin Tor",      "US-East",  "33 ms",  "410",   "Low",     "RP"},
+        };
+        table->setRows(servers);
+
+        // Status text
+        auto statusLine = make<Text>("Click a server to select it", 10.0f);
+        statusLine->setforeground(c(110, 110, 130));
+        statusLine->setisHitTestVisible(false);
+        page->addChild(statusLine);
+        Canvas::setLeft(*statusLine, sx);
+        Canvas::setTop(*statusLine, sy + 50);
+
+        // Sort callback — sorts local data vector and re-sets rows
+        auto rawTable = table.get();
+        auto serverData = std::make_shared<std::vector<Row>>(servers);
+        table->setOnSortRequested([rawTable, serverData, statusLine](usize col, bool asc) {
+            auto& data = *serverData;
+            std::sort(data.begin(), data.end(), [col, asc](const Row& a, const Row& b) {
+                if (col >= a.size() || col >= b.size()) return false;
+                // Try numeric comparison for Ping / Players columns
+                auto tryNum = [](const gut::String& s) -> float {
+                    float v = 0;
+                    if (std::sscanf(s.c_str(), "%f", &v) == 1) return v;
+                    return -1.0f;
+                };
+                float na = tryNum(a[col]), nb = tryNum(b[col]);
+                if (na >= 0 && nb >= 0) return asc ? na < nb : na > nb;
+                return asc ? a[col] < b[col] : a[col] > b[col];
+            });
+            rawTable->setRows(data);
+            rawTable->setselectedRow(-1);
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "Sorted by column %zu (%s)", col, asc ? "asc" : "desc");
+            statusLine->setforeground(gut::Color::fromRgba8(120, 180, 255));
+            statusLine->settext(buf);
+        });
+
+        table->setOnRowSelected([statusLine, serverData](isize row) {
+            if (row < 0) return;
+            auto& data = *serverData;
+            if (row < static_cast<gut::isize>(data.size())) {
+                statusLine->setforeground(gut::Color::fromRgba8(80, 200, 120));
+                statusLine->settext("Selected: " + data[static_cast<gut::usize>(row)][0] +
+                                    "  (" + data[static_cast<gut::usize>(row)][1] + ", " +
+                                    data[static_cast<gut::usize>(row)][2] + ")");
+            }
+        });
+
+        page->addChild(table);
+        Canvas::setLeft(*table, sx);
+        Canvas::setTop(*table, sy + 68);
+
+        tabControl->addTab("Table", page);
+    }
+
     _context->setRoot(root);
+
+    // Cursor style callback — map gut::CursorType to NSCursor
+    _context->setOnCursorChanged([](gut::CursorType cursor) {
+        switch (cursor) {
+            case gut::CursorType::Arrow:    [[NSCursor arrowCursor] set]; break;
+            case gut::CursorType::IBeam:    [[NSCursor IBeamCursor] set]; break;
+            case gut::CursorType::Hand:     [[NSCursor pointingHandCursor] set]; break;
+            case gut::CursorType::SizeNS:   [[NSCursor resizeUpDownCursor] set]; break;
+            case gut::CursorType::SizeWE:   [[NSCursor resizeLeftRightCursor] set]; break;
+            case gut::CursorType::SizeNWSE: [[NSCursor closedHandCursor] set]; break;
+            case gut::CursorType::SizeNESW: [[NSCursor closedHandCursor] set]; break;
+            case gut::CursorType::Move:     [[NSCursor openHandCursor] set]; break;
+            case gut::CursorType::Wait:     [[NSCursor arrowCursor] set]; break;
+            case gut::CursorType::Forbidden:[[NSCursor operationNotAllowedCursor] set]; break;
+        }
+    });
 }
 
 static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
@@ -1520,10 +1658,16 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
     NSTrackingArea* trackingArea = [[NSTrackingArea alloc]
         initWithRect:self.bounds
         options:(NSTrackingMouseMoved | NSTrackingActiveInKeyWindow |
-                 NSTrackingInVisibleRect | NSTrackingMouseEnteredAndExited)
+                 NSTrackingInVisibleRect | NSTrackingMouseEnteredAndExited |
+                 NSTrackingCursorUpdate)
         owner:self
         userInfo:nil];
     [self addTrackingArea:trackingArea];
+}
+
+- (void)cursorUpdate:(NSEvent*)event {
+    // Prevent AppKit from resetting the cursor — we manage it ourselves
+    (void)event;
 }
 
 - (BOOL)acceptsFirstResponder {
