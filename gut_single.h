@@ -5148,6 +5148,180 @@ private:
 } // namespace gut
 
 
+// --- gut/elements/Dialog.h ---
+
+#include <functional>
+
+namespace gut {
+
+/**
+ * @brief Result from a dialog interaction.
+ */
+enum class DialogResult {
+    None,
+    OK,
+    Cancel,
+    Yes,
+    No
+};
+
+/**
+ * @brief Predefined button sets for common dialog patterns.
+ */
+enum class DialogButtons {
+    None,           // No buttons — user must close via X or Escape
+    OK,             // [OK]
+    OKCancel,       // [OK] [Cancel]
+    YesNo,          // [Yes] [No]
+    YesNoCancel     // [Yes] [No] [Cancel]
+};
+
+/**
+ * @brief A modal dialog overlay control.
+ *
+ * Features:
+ *   - Semi-transparent backdrop blocks interaction with the rest of the UI
+ *   - Title bar with close (X) button, draggable to reposition
+ *   - Message text and/or custom content element
+ *   - Configurable button sets (OK, OK/Cancel, Yes/No, etc.)
+ *   - Keyboard: Escape to close, Enter/Return to accept default button
+ *   - Smooth appearance with drop shadow
+ *   - Click outside (backdrop) to dismiss (optional)
+ */
+class GUT_API Dialog : public Element {
+    GUT_OBJECT(Dialog, Element)
+public:
+    Dialog();
+    ~Dialog() override = default;
+
+    // -------------------------------------------------------------------------
+    // Content
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(String, title, "Dialog")
+    GUT_PROPERTY(String, message, "")
+
+    /**
+     * @brief Set a custom content element for the dialog body.
+     * If set, this replaces the message text.
+     */
+    void setContent(Ref<Element> content);
+    Element* content() const { return m_content.get(); }
+
+    // -------------------------------------------------------------------------
+    // Buttons
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(DialogButtons, buttons, DialogButtons::OK)
+
+    // -------------------------------------------------------------------------
+    // Sizing
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, dialogWidth, 420.0f)
+    GUT_PROPERTY(f32, dialogHeight, 200.0f)
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, cornerRadius, 8.0f)
+    GUT_PROPERTY(f32, titleFontSize, 15.0f)
+    GUT_PROPERTY(f32, messageFontSize, 13.0f)
+    GUT_PROPERTY(f32, buttonFontSize, 13.0f)
+    GUT_PROPERTY(f32, titleBarHeight, 40.0f)
+    GUT_PROPERTY(f32, buttonHeight, 32.0f)
+    GUT_PROPERTY(f32, buttonWidth, 80.0f)
+    GUT_PROPERTY(f32, buttonSpacing, 10.0f)
+    GUT_PROPERTY(f32, buttonAreaHeight, 52.0f)
+
+    // Colors — backdrop
+    GUT_PROPERTY(Color, backdropColor, Color::fromRgba8(0, 0, 0, 120))
+
+    // Colors — dialog chrome
+    GUT_PROPERTY(Color, dialogBackground, Color::fromHex(0x2A2A3A))
+    GUT_PROPERTY(Color, dialogBorderColor, Color::fromHex(0x505068))
+    GUT_PROPERTY(Color, titleBarBackground, Color::fromHex(0x323248))
+    GUT_PROPERTY(Color, titleForeground, Color::fromHex(0xE0E0F0))
+    GUT_PROPERTY(Color, closeButtonColor, Color::fromHex(0x808098))
+    GUT_PROPERTY(Color, closeButtonHoverColor, Color::fromRgba8(240, 80, 80, 255))
+
+    // Colors — body
+    GUT_PROPERTY(Color, messageForeground, Color::fromHex(0xC8C8DC))
+
+    // Colors — buttons
+    GUT_PROPERTY(Color, primaryButtonBackground, Color::fromRgba8(60, 130, 220, 255))
+    GUT_PROPERTY(Color, primaryButtonHoverBackground, Color::fromRgba8(80, 150, 240, 255))
+    GUT_PROPERTY(Color, primaryButtonForeground, Color::white())
+    GUT_PROPERTY(Color, secondaryButtonBackground, Color::fromHex(0x3A3A4E))
+    GUT_PROPERTY(Color, secondaryButtonHoverBackground, Color::fromHex(0x4A4A60))
+    GUT_PROPERTY(Color, secondaryButtonForeground, Color::fromHex(0xD0D0E0))
+    GUT_PROPERTY(Color, buttonBorderColor, Color::fromHex(0x505068))
+
+    // -------------------------------------------------------------------------
+    // Behavior
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(bool, dismissOnBackdropClick, false)
+
+    // -------------------------------------------------------------------------
+    // Show / Close
+    // -------------------------------------------------------------------------
+
+    void show();
+    void close(DialogResult result = DialogResult::Cancel);
+    bool isVisible() const { return m_visible; }
+
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+
+    void setOnResult(std::function<void(DialogResult)> cb) { m_onResult = std::move(cb); }
+    void setOnClosed(std::function<void()> cb) { m_onClosed = std::move(cb); }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+
+private:
+    bool m_visible{false};
+    Ref<Element> m_content;
+    std::function<void(DialogResult)> m_onResult;
+    std::function<void()> m_onClosed;
+
+    // Drag state (title bar)
+    bool m_dragging{false};
+    f32 m_dragStartX{0.0f};
+    f32 m_dragStartY{0.0f};
+    f32 m_dialogOffsetX{0.0f};  // offset from default centered position
+    f32 m_dialogOffsetY{0.0f};
+    f32 m_dragStartOffsetX{0.0f};
+    f32 m_dragStartOffsetY{0.0f};
+
+    // Hover state for interactive regions
+    bool m_closeHovered{false};
+    isize m_hoveredButton{-1};
+
+    // Helpers
+    Rectf dialogRect() const;        // in screen coords
+    Rectf titleBarRect() const;      // relative to dialog
+    Rectf closeButtonRect() const;   // relative to dialog
+    Rectf bodyRect() const;          // relative to dialog
+    Rectf buttonAreaRect() const;    // relative to dialog
+    struct ButtonInfo { Rectf rect; String label; bool primary; DialogResult result; };
+    std::vector<ButtonInfo> buttonLayout() const;
+
+    void renderOverlay(RenderContext& ctx);
+
+    static constexpr f32 kCloseButtonSize = 16.0f;
+    static constexpr f32 kPadding = 20.0f;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/Image.h ---
 
 
@@ -17984,6 +18158,432 @@ void Table::onMouseLeave() {
         invalidateRender();
     }
     Element::onMouseLeave();
+}
+
+} // namespace gut
+
+
+// --- elements/Dialog.cpp ---
+
+#include <cmath>
+#include <algorithm>
+
+namespace gut {
+
+Dialog::Dialog() {
+    setfocusable(true);
+    setcursor(CursorType::Arrow);
+}
+
+void Dialog::setContent(Ref<Element> content) {
+    m_content = std::move(content);
+    invalidateRender();
+}
+
+void Dialog::show() {
+    if (m_visible) return;
+    m_visible = true;
+    m_dialogOffsetX = 0.0f;
+    m_dialogOffsetY = 0.0f;
+    m_closeHovered = false;
+    m_hoveredButton = -1;
+    m_dragging = false;
+
+    if (context()) {
+        context()->inputManager().captureMouse(this);
+        context()->addOverlay(this, [this](RenderContext& ctx) {
+            renderOverlay(ctx);
+        });
+        context()->focusManager().setFocus(this);
+    }
+    invalidateRender();
+}
+
+void Dialog::close(DialogResult result) {
+    if (!m_visible) return;
+    m_visible = false;
+    m_dragging = false;
+
+    if (context()) {
+        context()->inputManager().releaseMouse();
+        context()->removeOverlay(this);
+    }
+    if (m_onResult) m_onResult(result);
+    if (m_onClosed) m_onClosed();
+    invalidateRender();
+}
+
+Rectf Dialog::dialogRect() const {
+    if (!context()) return {};
+    Size2f win = context()->size();
+    f32 dw = dialogWidth();
+    f32 dh = dialogHeight();
+    f32 x = (win.width - dw) * 0.5f + m_dialogOffsetX;
+    f32 y = (win.height - dh) * 0.5f + m_dialogOffsetY;
+    return {x, y, dw, dh};
+}
+
+Rectf Dialog::titleBarRect() const {
+    return {0, 0, dialogWidth(), titleBarHeight()};
+}
+
+Rectf Dialog::closeButtonRect() const {
+    f32 sz = kCloseButtonSize;
+    f32 cx = dialogWidth() - kPadding;
+    f32 cy = titleBarHeight() * 0.5f;
+    return {cx - sz * 0.5f, cy - sz * 0.5f, sz, sz};
+}
+
+Rectf Dialog::bodyRect() const {
+    f32 top = titleBarHeight();
+    f32 bottom = (buttons() != DialogButtons::None) ? buttonAreaHeight() : 0.0f;
+    return {kPadding, top + 10.0f, dialogWidth() - kPadding * 2, dialogHeight() - top - bottom - 10.0f};
+}
+
+Rectf Dialog::buttonAreaRect() const {
+    f32 h = buttonAreaHeight();
+    return {0, dialogHeight() - h, dialogWidth(), h};
+}
+
+std::vector<Dialog::ButtonInfo> Dialog::buttonLayout() const {
+    std::vector<ButtonInfo> btns;
+    f32 bw = buttonWidth();
+    f32 bh = buttonHeight();
+    f32 sp = buttonSpacing();
+
+    switch (buttons()) {
+        case DialogButtons::None:
+            break;
+        case DialogButtons::OK:
+            btns.push_back({{0, 0, bw, bh}, "OK", true, DialogResult::OK});
+            break;
+        case DialogButtons::OKCancel:
+            btns.push_back({{0, 0, bw, bh}, "OK", true, DialogResult::OK});
+            btns.push_back({{0, 0, bw, bh}, "Cancel", false, DialogResult::Cancel});
+            break;
+        case DialogButtons::YesNo:
+            btns.push_back({{0, 0, bw, bh}, "Yes", true, DialogResult::Yes});
+            btns.push_back({{0, 0, bw, bh}, "No", false, DialogResult::No});
+            break;
+        case DialogButtons::YesNoCancel:
+            btns.push_back({{0, 0, bw, bh}, "Yes", true, DialogResult::Yes});
+            btns.push_back({{0, 0, bw, bh}, "No", false, DialogResult::No});
+            btns.push_back({{0, 0, bw, bh}, "Cancel", false, DialogResult::Cancel});
+            break;
+    }
+
+    // Center buttons in button area
+    f32 totalW = btns.empty() ? 0.0f : (static_cast<f32>(btns.size()) * bw + static_cast<f32>(btns.size() - 1) * sp);
+    Rectf ba = buttonAreaRect();
+    f32 startX = ba.x + (ba.width - totalW) * 0.5f;
+    f32 cy = ba.y + (ba.height - bh) * 0.5f;
+
+    for (usize i = 0; i < btns.size(); ++i) {
+        btns[i].rect.x = startX + static_cast<f32>(i) * (bw + sp);
+        btns[i].rect.y = cy;
+    }
+
+    return btns;
+}
+
+Size2f Dialog::measureOverride(Size2f availableSize) {
+    return {0, 0}; // Dialog doesn't occupy layout space; it's an overlay
+}
+
+void Dialog::onRender(RenderContext& /*ctx*/) {
+    // Rendering happens via the overlay system — nothing here
+}
+
+void Dialog::renderOverlay(RenderContext& ctx) {
+    if (!m_visible || !context()) return;
+
+    Size2f win = context()->size();
+
+    // --- Backdrop ---
+    ctx.fillRect({0, 0, win.width, win.height}, backdropColor());
+
+    // --- Dialog box ---
+    Rectf dr = dialogRect();
+    f32 cr = cornerRadius();
+
+    // Shadow
+    ctx.drawDropShadow(dr, cr, Color::fromRgba8(0, 0, 0, 140), 24.0f, 0.0f, 8.0f);
+
+    // Background
+    ctx.fillRoundedRect(dr, cr, dialogBackground());
+
+    // Save and translate into dialog-local space
+    ctx.save();
+    ctx.translate(dr.x, dr.y);
+
+    // --- Title bar ---
+    {
+        Rectf tb = titleBarRect();
+        // Title bar background (top-rounded corners)
+        ctx.save();
+        ctx.pushClip({tb.x, tb.y, tb.width, tb.height}, cr);
+        ctx.fillRect({tb.x, tb.y, tb.width, tb.height}, titleBarBackground());
+        ctx.popClip();
+        ctx.restore();
+
+        // Separator line
+        ctx.fillRect({0, tb.height - 1, tb.width, 1}, dialogBorderColor());
+
+        // Title text
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(titleFontSize());
+            if (face) {
+                f32 textY = (tb.height - face->lineHeight()) * 0.5f + face->ascender();
+                ctx.drawText(face.get(), title(), {kPadding, textY}, titleForeground());
+            }
+        }
+
+        // Close button (X)
+        Rectf cb = closeButtonRect();
+        Color xColor = m_closeHovered ? closeButtonHoverColor() : closeButtonColor();
+        f32 inset = 3.0f;
+        ctx.drawLine({cb.x + inset, cb.y + inset}, {cb.x + cb.width - inset, cb.y + cb.height - inset}, xColor, 2.0f);
+        ctx.drawLine({cb.x + cb.width - inset, cb.y + inset}, {cb.x + inset, cb.y + cb.height - inset}, xColor, 2.0f);
+    }
+
+    // --- Body (message text) ---
+    {
+        Rectf br = bodyRect();
+        Font* font = context()->defaultFont();
+        if (font && !message().empty()) {
+            auto face = font->getFace(messageFontSize());
+            if (face) {
+                // Simple word-wrapping text rendering
+                f32 lineH = face->lineHeight();
+                f32 maxW = br.width;
+                f32 curX = 0;
+                f32 curY = face->ascender();
+                const String& msg = message();
+
+                // Split into words and wrap
+                usize i = 0;
+                while (i < msg.size()) {
+                    // Skip leading spaces
+                    while (i < msg.size() && msg[i] == ' ') ++i;
+                    if (i >= msg.size()) break;
+
+                    // Check for newline
+                    if (msg[i] == '\n') {
+                        curX = 0;
+                        curY += lineH;
+                        ++i;
+                        continue;
+                    }
+
+                    // Extract word
+                    usize start = i;
+                    while (i < msg.size() && msg[i] != ' ' && msg[i] != '\n') ++i;
+                    String word = msg.substr(start, i - start);
+
+                    f32 wordW = face->measureWidth(word);
+                    f32 spaceW = face->measureWidth(" ");
+
+                    if (curX > 0 && curX + spaceW + wordW > maxW) {
+                        // Wrap to next line
+                        curX = 0;
+                        curY += lineH;
+                    }
+
+                    if (curX > 0) {
+                        curX += spaceW;
+                    }
+
+                    if (br.y + curY < br.y + br.height) {
+                        ctx.drawText(face.get(), word, {br.x + curX, br.y + curY}, messageForeground());
+                    }
+                    curX += wordW;
+                }
+            }
+        }
+    }
+
+    // --- Buttons ---
+    {
+        auto btns = buttonLayout();
+        Font* font = context()->defaultFont();
+        Ref<FontFace> face;
+        if (font) face = font->getFace(buttonFontSize());
+
+        for (isize i = 0; i < static_cast<isize>(btns.size()); ++i) {
+            const auto& btn = btns[static_cast<usize>(i)];
+            bool hovered = (i == m_hoveredButton);
+            Color bg, fg;
+
+            if (btn.primary) {
+                bg = hovered ? primaryButtonHoverBackground() : primaryButtonBackground();
+                fg = primaryButtonForeground();
+            } else {
+                bg = hovered ? secondaryButtonHoverBackground() : secondaryButtonBackground();
+                fg = secondaryButtonForeground();
+            }
+
+            f32 bcr = 5.0f;
+            ctx.fillRoundedRect(btn.rect, bcr, bg);
+            ctx.strokeRoundedRect(btn.rect, bcr, buttonBorderColor(), 1.0f);
+
+            if (face) {
+                f32 tw = face->measureWidth(btn.label);
+                f32 tx = btn.rect.x + (btn.rect.width - tw) * 0.5f;
+                f32 ty = btn.rect.y + (btn.rect.height - face->lineHeight()) * 0.5f + face->ascender();
+                ctx.drawText(face.get(), btn.label, {tx, ty}, fg);
+            }
+        }
+    }
+
+    ctx.restore();
+
+    // --- Dialog border ---
+    ctx.strokeRoundedRect(dr, cr, dialogBorderColor(), 1.0f);
+}
+
+bool Dialog::onMouseEvent(const MouseEvent& event) {
+    if (!m_visible || !context()) return false;
+
+    // Convert mouse position from element-local space to screen space.
+    // Since mouse capture routes events to us in element-local space,
+    // we need screen coords to test against dialog geometry.
+    Rectf sb = screenBounds();
+    f32 screenX = sb.x + event.position.x;
+    f32 screenY = sb.y + event.position.y;
+
+    Rectf dr = dialogRect();
+    // Position relative to dialog box
+    f32 dlgX = screenX - dr.x;
+    f32 dlgY = screenY - dr.y;
+    bool insideDialog = (screenX >= dr.x && screenX < dr.x + dr.width &&
+                         screenY >= dr.y && screenY < dr.y + dr.height);
+
+    switch (event.type) {
+        case MouseEventType::ButtonDown: {
+            if (event.button != MouseButton::Left) break;
+
+            if (!insideDialog) {
+                if (dismissOnBackdropClick()) {
+                    close(DialogResult::Cancel);
+                }
+                return true; // consume — modal
+            }
+
+            // Close button
+            Rectf cb = closeButtonRect();
+            if (dlgX >= cb.x && dlgX < cb.x + cb.width &&
+                dlgY >= cb.y && dlgY < cb.y + cb.height) {
+                close(DialogResult::Cancel);
+                return true;
+            }
+
+            // Check buttons
+            auto btns = buttonLayout();
+            for (auto& btn : btns) {
+                if (dlgX >= btn.rect.x && dlgX < btn.rect.x + btn.rect.width &&
+                    dlgY >= btn.rect.y && dlgY < btn.rect.y + btn.rect.height) {
+                    close(btn.result);
+                    return true;
+                }
+            }
+
+            // Title bar drag
+            Rectf tb = titleBarRect();
+            if (dlgY >= tb.y && dlgY < tb.y + tb.height) {
+                m_dragging = true;
+                m_dragStartX = screenX;
+                m_dragStartY = screenY;
+                m_dragStartOffsetX = m_dialogOffsetX;
+                m_dragStartOffsetY = m_dialogOffsetY;
+            }
+
+            return true;
+        }
+
+        case MouseEventType::ButtonUp: {
+            if (m_dragging) {
+                m_dragging = false;
+            }
+            return true;
+        }
+
+        case MouseEventType::Move: {
+            if (m_dragging) {
+                m_dialogOffsetX = m_dragStartOffsetX + (screenX - m_dragStartX);
+                m_dialogOffsetY = m_dragStartOffsetY + (screenY - m_dragStartY);
+                invalidateRender();
+                return true;
+            }
+
+            // Update hover states
+            bool needsRedraw = false;
+
+            // Close button hover
+            Rectf cb = closeButtonRect();
+            bool closeHov = insideDialog &&
+                            dlgX >= cb.x && dlgX < cb.x + cb.width &&
+                            dlgY >= cb.y && dlgY < cb.y + cb.height;
+            if (closeHov != m_closeHovered) {
+                m_closeHovered = closeHov;
+                needsRedraw = true;
+            }
+
+            // Button hover
+            isize newHovBtn = -1;
+            if (insideDialog) {
+                auto btns = buttonLayout();
+                for (isize i = 0; i < static_cast<isize>(btns.size()); ++i) {
+                    const auto& btn = btns[static_cast<usize>(i)];
+                    if (dlgX >= btn.rect.x && dlgX < btn.rect.x + btn.rect.width &&
+                        dlgY >= btn.rect.y && dlgY < btn.rect.y + btn.rect.height) {
+                        newHovBtn = i;
+                        break;
+                    }
+                }
+            }
+            if (newHovBtn != m_hoveredButton) {
+                m_hoveredButton = newHovBtn;
+                needsRedraw = true;
+            }
+
+            if (needsRedraw) invalidateRender();
+            return true; // consume — modal
+        }
+
+        case MouseEventType::Wheel:
+            return true; // consume — modal, don't scroll behind
+
+        default:
+            break;
+    }
+    return true;
+}
+
+bool Dialog::onKeyEvent(const KeyEvent& event) {
+    if (!m_visible) return false;
+    if (!event.isKeyDown()) return true;
+
+    if (event.key == Key::Escape) {
+        close(DialogResult::Cancel);
+        return true;
+    }
+
+    if (event.key == Key::Return) {
+        // Press the primary (first) button
+        auto btns = buttonLayout();
+        for (auto& btn : btns) {
+            if (btn.primary) {
+                close(btn.result);
+                return true;
+            }
+        }
+        // No primary button — just close
+        close(DialogResult::OK);
+        return true;
+    }
+
+    return true; // consume all keys while modal
 }
 
 } // namespace gut

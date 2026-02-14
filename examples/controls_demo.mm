@@ -176,7 +176,7 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         Canvas::setLeft(*title, 30);
         Canvas::setTop(*title, 24);
 
-        auto subtitle = make<Text>("Interactive control showcase  \u2014  TextBox, Button, CheckBox, RadioButton, Toggle, Slider, ProgressBar, DropDown, TabControl, Table", 11.0f);
+        auto subtitle = make<Text>("Interactive control showcase  \u2014  TextBox, Button, CheckBox, RadioButton, Toggle, Slider, ProgressBar, DropDown, TabControl, Table, Dialog", 11.0f);
         subtitle->setforeground(c(130, 130, 150));
         subtitle->setisHitTestVisible(false);
         root->addChild(subtitle);
@@ -1449,6 +1449,311 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         Canvas::setTop(*table, sy + 68);
 
         tabControl->addTab("Table", page);
+    }
+
+    // =====================================================================
+    // TAB 6 — "Dialog"  (Modal dialogs)
+    // =====================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(W - 40);
+        page->setheight(H - 95 - 34);
+
+        f32 sx = 20, sy = 20;
+
+        // Section title
+        {
+            auto t = make<Text>("Modal Dialogs", 16.0f);
+            t->setforeground(c(200, 200, 220));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, sx);
+            Canvas::setTop(*t, sy);
+        }
+        {
+            auto t = make<Text>("Dialogs are modal overlays with backdrop, title bar (draggable), close button, and configurable action buttons.", 10.5f);
+            t->setforeground(c(110, 110, 130));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, sx);
+            Canvas::setTop(*t, sy + 24);
+        }
+
+        // Status line for dialog results
+        auto dlgStatus = make<Text>("Click a button to open a dialog", 11.0f);
+        dlgStatus->setforeground(c(110, 110, 130));
+        dlgStatus->setisHitTestVisible(false);
+        page->addChild(dlgStatus);
+        Canvas::setLeft(*dlgStatus, sx);
+        Canvas::setTop(*dlgStatus, sy + 500);
+
+        // --- Create shared Dialog element (reused for all demos) ---
+        auto dialog = make<Dialog>();
+        root->addChild(dialog);  // Must be child of root so it has a context
+
+        // ---- Button 1: Simple message dialog ----
+        {
+            f32 by = sy + 60;
+            auto label = make<Text>("Message Dialog (OK)", 11.0f);
+            label->setforeground(c(160, 160, 180));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, sx);
+            Canvas::setTop(*label, by);
+
+            auto btn = make<Button>("Show Message");
+            btn->setwidth(140);
+            btn->setheight(32);
+            btn->setbackground(c(55, 55, 72));
+            btn->sethoverBackground(c(65, 65, 85));
+            btn->setpressedBackground(c(50, 50, 65));
+            btn->setforeground(c(200, 200, 220));
+            btn->setborderColor(c(80, 80, 100));
+            btn->setcornerRadius(5.0f);
+
+            auto rawDlg = dialog.get();
+            btn->setOnClick([rawDlg, dlgStatus]() {
+                rawDlg->settitle("Information");
+                rawDlg->setmessage("This is a simple informational message dialog.\nIt supports word wrapping for longer text that needs to flow across multiple lines in the dialog body.");
+                rawDlg->setbuttons(gut::DialogButtons::OK);
+                rawDlg->setdialogWidth(420.0f);
+                rawDlg->setdialogHeight(200.0f);
+                rawDlg->setOnResult([dlgStatus](gut::DialogResult r) {
+                    dlgStatus->setforeground(gut::Color::fromRgba8(80, 200, 120));
+                    dlgStatus->settext("Message dialog closed: OK");
+                });
+                rawDlg->show();
+            });
+
+            page->addChild(btn);
+            Canvas::setLeft(*btn, sx);
+            Canvas::setTop(*btn, by + 20);
+        }
+
+        // ---- Button 2: Confirmation dialog (OK/Cancel) ----
+        {
+            f32 by = sy + 130;
+            auto label = make<Text>("Confirmation Dialog (OK / Cancel)", 11.0f);
+            label->setforeground(c(160, 160, 180));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, sx);
+            Canvas::setTop(*label, by);
+
+            auto btn = make<Button>("Confirm Action");
+            btn->setwidth(140);
+            btn->setheight(32);
+            btn->setbackground(c(55, 55, 72));
+            btn->sethoverBackground(c(65, 65, 85));
+            btn->setpressedBackground(c(50, 50, 65));
+            btn->setforeground(c(200, 200, 220));
+            btn->setborderColor(c(80, 80, 100));
+            btn->setcornerRadius(5.0f);
+
+            auto rawDlg = dialog.get();
+            btn->setOnClick([rawDlg, dlgStatus]() {
+                rawDlg->settitle("Confirm Delete");
+                rawDlg->setmessage("Are you sure you want to delete this character? This action cannot be undone.");
+                rawDlg->setbuttons(gut::DialogButtons::OKCancel);
+                rawDlg->setdialogWidth(400.0f);
+                rawDlg->setdialogHeight(180.0f);
+                rawDlg->setOnResult([dlgStatus](gut::DialogResult r) {
+                    if (r == gut::DialogResult::OK) {
+                        dlgStatus->setforeground(gut::Color::fromRgba8(240, 120, 80));
+                        dlgStatus->settext("Confirmed: Character deleted!");
+                    } else {
+                        dlgStatus->setforeground(gut::Color::fromRgba8(180, 180, 200));
+                        dlgStatus->settext("Delete cancelled.");
+                    }
+                });
+                rawDlg->show();
+            });
+
+            page->addChild(btn);
+            Canvas::setLeft(*btn, sx);
+            Canvas::setTop(*btn, by + 20);
+        }
+
+        // ---- Button 3: Yes/No dialog ----
+        {
+            f32 by = sy + 200;
+            auto label = make<Text>("Yes / No Dialog", 11.0f);
+            label->setforeground(c(160, 160, 180));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, sx);
+            Canvas::setTop(*label, by);
+
+            auto btn = make<Button>("Save Changes?");
+            btn->setwidth(140);
+            btn->setheight(32);
+            btn->setbackground(c(55, 55, 72));
+            btn->sethoverBackground(c(65, 65, 85));
+            btn->setpressedBackground(c(50, 50, 65));
+            btn->setforeground(c(200, 200, 220));
+            btn->setborderColor(c(80, 80, 100));
+            btn->setcornerRadius(5.0f);
+
+            auto rawDlg = dialog.get();
+            btn->setOnClick([rawDlg, dlgStatus]() {
+                rawDlg->settitle("Unsaved Changes");
+                rawDlg->setmessage("You have unsaved changes. Do you want to save before closing?");
+                rawDlg->setbuttons(gut::DialogButtons::YesNo);
+                rawDlg->setdialogWidth(400.0f);
+                rawDlg->setdialogHeight(175.0f);
+                rawDlg->setOnResult([dlgStatus](gut::DialogResult r) {
+                    if (r == gut::DialogResult::Yes) {
+                        dlgStatus->setforeground(gut::Color::fromRgba8(80, 200, 120));
+                        dlgStatus->settext("Changes saved!");
+                    } else {
+                        dlgStatus->setforeground(gut::Color::fromRgba8(240, 180, 80));
+                        dlgStatus->settext("Changes discarded.");
+                    }
+                });
+                rawDlg->show();
+            });
+
+            page->addChild(btn);
+            Canvas::setLeft(*btn, sx);
+            Canvas::setTop(*btn, by + 20);
+        }
+
+        // ---- Button 4: Yes/No/Cancel dialog ----
+        {
+            f32 by = sy + 270;
+            auto label = make<Text>("Yes / No / Cancel Dialog", 11.0f);
+            label->setforeground(c(160, 160, 180));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, sx);
+            Canvas::setTop(*label, by);
+
+            auto btn = make<Button>("Exit Application?");
+            btn->setwidth(140);
+            btn->setheight(32);
+            btn->setbackground(c(55, 55, 72));
+            btn->sethoverBackground(c(65, 65, 85));
+            btn->setpressedBackground(c(50, 50, 65));
+            btn->setforeground(c(200, 200, 220));
+            btn->setborderColor(c(80, 80, 100));
+            btn->setcornerRadius(5.0f);
+
+            auto rawDlg = dialog.get();
+            btn->setOnClick([rawDlg, dlgStatus]() {
+                rawDlg->settitle("Exit Application");
+                rawDlg->setmessage("Do you want to save your work before exiting?");
+                rawDlg->setbuttons(gut::DialogButtons::YesNoCancel);
+                rawDlg->setdialogWidth(420.0f);
+                rawDlg->setdialogHeight(180.0f);
+                rawDlg->setOnResult([dlgStatus](gut::DialogResult r) {
+                    switch (r) {
+                        case gut::DialogResult::Yes:
+                            dlgStatus->setforeground(gut::Color::fromRgba8(80, 200, 120));
+                            dlgStatus->settext("Saved and exiting!");
+                            break;
+                        case gut::DialogResult::No:
+                            dlgStatus->setforeground(gut::Color::fromRgba8(240, 180, 80));
+                            dlgStatus->settext("Exiting without saving.");
+                            break;
+                        default:
+                            dlgStatus->setforeground(gut::Color::fromRgba8(180, 180, 200));
+                            dlgStatus->settext("Exit cancelled.");
+                            break;
+                    }
+                });
+                rawDlg->show();
+            });
+
+            page->addChild(btn);
+            Canvas::setLeft(*btn, sx);
+            Canvas::setTop(*btn, by + 20);
+        }
+
+        // ---- Button 5: Dismissible (click-outside) dialog ----
+        {
+            f32 by = sy + 340;
+            auto label = make<Text>("Dismissible Dialog (click backdrop to close)", 11.0f);
+            label->setforeground(c(160, 160, 180));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, sx);
+            Canvas::setTop(*label, by);
+
+            auto btn = make<Button>("Show Notice");
+            btn->setwidth(140);
+            btn->setheight(32);
+            btn->setbackground(c(55, 55, 72));
+            btn->sethoverBackground(c(65, 65, 85));
+            btn->setpressedBackground(c(50, 50, 65));
+            btn->setforeground(c(200, 200, 220));
+            btn->setborderColor(c(80, 80, 100));
+            btn->setcornerRadius(5.0f);
+
+            auto rawDlg = dialog.get();
+            btn->setOnClick([rawDlg, dlgStatus]() {
+                rawDlg->settitle("Server Maintenance");
+                rawDlg->setmessage("Scheduled maintenance will occur tonight at 2:00 AM PST.\n\nExpected downtime: approximately 2 hours.\n\nClick anywhere outside this dialog or press Escape to dismiss.");
+                rawDlg->setbuttons(gut::DialogButtons::None);
+                rawDlg->setdismissOnBackdropClick(true);
+                rawDlg->setdialogWidth(400.0f);
+                rawDlg->setdialogHeight(210.0f);
+                rawDlg->setOnResult([dlgStatus](gut::DialogResult) {
+                    dlgStatus->setforeground(gut::Color::fromRgba8(120, 180, 255));
+                    dlgStatus->settext("Notice dismissed.");
+                });
+                rawDlg->show();
+            });
+
+            page->addChild(btn);
+            Canvas::setLeft(*btn, sx);
+            Canvas::setTop(*btn, by + 20);
+        }
+
+        // ---- Right column: Feature list ----
+        {
+            f32 rx = 300, ry = sy + 60;
+            const char* features[] = {
+                "\xe2\x9c\x93  Draggable title bar",
+                "\xe2\x9c\x93  Close (X) button",
+                "\xe2\x9c\x93  Escape key to close",
+                "\xe2\x9c\x93  Enter key to accept",
+                "\xe2\x9c\x93  Modal backdrop blocks input",
+                "\xe2\x9c\x93  Word-wrapping message text",
+                "\xe2\x9c\x93  OK / Cancel / Yes / No buttons",
+                "\xe2\x9c\x93  Optional click-outside dismiss",
+                "\xe2\x9c\x93  Drop shadow & rounded corners",
+                "\xe2\x9c\x93  Hover highlights on buttons & X",
+            };
+
+            auto hdr = make<Text>("Features", 13.0f);
+            hdr->setforeground(c(180, 180, 200));
+            hdr->setisHitTestVisible(false);
+            page->addChild(hdr);
+            Canvas::setLeft(*hdr, rx);
+            Canvas::setTop(*hdr, ry - 5);
+
+            for (int i = 0; i < 10; ++i) {
+                auto t = make<Text>(features[i], 10.5f);
+                t->setforeground(c(130, 200, 140));
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, rx);
+                Canvas::setTop(*t, ry + 18 + i * 20);
+            }
+        }
+
+        // Keyboard hints
+        {
+            f32 hy = sy + 530;
+            auto t = make<Text>("Esc  Close dialog    Enter  Accept default button    Drag title bar to move", 9.5f);
+            t->setforeground(c(100, 100, 120));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, sx);
+            Canvas::setTop(*t, hy);
+        }
+
+        tabControl->addTab("Dialog", page);
     }
 
     _context->setRoot(root);

@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 48 done, 9 partial, 9 missing** out of 63 core features.
+**Score: 49 done, 9 partial, 8 missing** out of 63 core features.
 
 ---
 
@@ -86,7 +86,7 @@
 - [x] TabControl
 - [ ] ListView / ItemsControl
 - [ ] TreeView
-- [ ] Dialog / Modal
+- [x] Dialog / Modal — modal overlay with backdrop, draggable title bar, close (X), configurable buttons (OK/Cancel/Yes/No), word-wrapping message, Escape/Enter keys
 - [ ] Toast / Notification
 - [ ] Splitter / Resizable panels
 - [ ] Toolbar
