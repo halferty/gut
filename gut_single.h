@@ -1835,7 +1835,14 @@ public:
      * @param angle Rotation angle in radians.
      */
     void rotate(f32 angle);
-    
+
+    /**
+     * @brief Skew the coordinate system.
+     * @param skewX Horizontal skew angle in radians.
+     * @param skewY Vertical skew angle in radians.
+     */
+    void skew(f32 skewX, f32 skewY);
+
     /**
      * @brief Transform a point from local to screen coordinates.
      */
@@ -2102,11 +2109,9 @@ public:
 
 private:
     struct State {
-        f32 translateX{0};
-        f32 translateY{0};
-        f32 scaleX{1};
-        f32 scaleY{1};
-        f32 rotation{0};
+        // 2D affine transform matrix stored as [a b tx; c d ty; 0 0 1]
+        // where transformPoint(x,y) = (a*x + b*y + tx, c*x + d*y + ty)
+        f32 m[6]{1, 0, 0, 0, 1, 0}; // identity: a=1 b=0 tx=0 c=0 d=1 ty=0
         f32 opacity{1};
         Rectf clipRect{};
         f32 clipCornerRadius{0};
@@ -3800,6 +3805,9 @@ public:
     GUT_PROPERTY(f32, opacity, 1.0f)
     GUT_PROPERTY(f32, scaleX, 1.0f)
     GUT_PROPERTY(f32, scaleY, 1.0f)
+    GUT_PROPERTY(f32, rotation, 0.0f)
+    GUT_PROPERTY(f32, skewX, 0.0f)
+    GUT_PROPERTY(f32, skewY, 0.0f)
     GUT_PROPERTY(bool, isEnabled, true)
     GUT_PROPERTY(i32, zIndex, 0)
     GUT_PROPERTY(bool, clipToBounds, false)
@@ -12203,42 +12211,56 @@ void RenderContext::restore() {
 }
 
 void RenderContext::translate(f32 x, f32 y) {
-    m_currentState.translateX += x;
-    m_currentState.translateY += y;
+    // M = M * T(x,y)
+    auto& m = m_currentState.m;
+    m[2] += m[0] * x + m[1] * y;
+    m[5] += m[3] * x + m[4] * y;
 }
 
 void RenderContext::scale(f32 sx, f32 sy) {
-    m_currentState.scaleX *= sx;
-    m_currentState.scaleY *= sy;
+    // M = M * S(sx,sy)
+    auto& m = m_currentState.m;
+    m[0] *= sx; m[3] *= sx;
+    m[1] *= sy; m[4] *= sy;
 }
 
 void RenderContext::rotate(f32 angle) {
-    m_currentState.rotation += angle;
+    // M = M * R(angle)
+    auto& m = m_currentState.m;
+    f32 c = std::cos(angle), s = std::sin(angle);
+    f32 a0 = m[0], a1 = m[1], a3 = m[3], a4 = m[4];
+    m[0] = a0 * c + a1 * s;   m[1] = -a0 * s + a1 * c;
+    m[3] = a3 * c + a4 * s;   m[4] = -a3 * s + a4 * c;
+}
+
+void RenderContext::skew(f32 skewX, f32 skewY) {
+    // M = M * Sk(skewX, skewY) where Sk = [1 tan(skewX); tan(skewY) 1]
+    auto& m = m_currentState.m;
+    f32 tx = std::tan(skewX), ty = std::tan(skewY);
+    f32 a0 = m[0], a1 = m[1], a3 = m[3], a4 = m[4];
+    m[0] = a0 + a1 * ty;   m[1] = a0 * tx + a1;
+    m[3] = a3 + a4 * ty;   m[4] = a3 * tx + a4;
 }
 
 Point2f RenderContext::transformPoint(Point2f point) const {
-    // Apply rotation (around origin)
-    if (m_currentState.rotation != 0) {
-        f32 c = std::cos(m_currentState.rotation);
-        f32 s = std::sin(m_currentState.rotation);
-        f32 x = point.x * c - point.y * s;
-        f32 y = point.x * s + point.y * c;
-        point = {x, y};
-    }
-    
+    const auto& m = m_currentState.m;
     return {
-        point.x * m_currentState.scaleX + m_currentState.translateX,
-        point.y * m_currentState.scaleY + m_currentState.translateY
+        m[0] * point.x + m[1] * point.y + m[2],
+        m[3] * point.x + m[4] * point.y + m[5]
     };
 }
 
 void RenderContext::pushClip(Rectf rect, f32 cornerRadius) {
-    Rectf transformed = {
-        rect.x + m_currentState.translateX,
-        rect.y + m_currentState.translateY,
-        rect.width * m_currentState.scaleX,
-        rect.height * m_currentState.scaleY
-    };
+    // Transform all four corners and compute axis-aligned bounding box
+    Point2f p0 = transformPoint({rect.x, rect.y});
+    Point2f p1 = transformPoint({rect.x + rect.width, rect.y});
+    Point2f p2 = transformPoint({rect.x + rect.width, rect.y + rect.height});
+    Point2f p3 = transformPoint({rect.x, rect.y + rect.height});
+    f32 minX = std::min({p0.x, p1.x, p2.x, p3.x});
+    f32 minY = std::min({p0.y, p1.y, p2.y, p3.y});
+    f32 maxX = std::max({p0.x, p1.x, p2.x, p3.x});
+    f32 maxY = std::max({p0.y, p1.y, p2.y, p3.y});
+    Rectf transformed = {minX, minY, maxX - minX, maxY - minY};
     
     if (m_currentState.hasClip && cornerRadius <= 0) {
         transformed = transformed.intersection(m_currentState.clipRect);
@@ -16522,14 +16544,20 @@ void Element::render(RenderContext& ctx) {
     ctx.save();
     ctx.translate(m_bounds.x, m_bounds.y);
     ctx.setOpacity(ctx.opacity() * opacity());
-    
-    // Apply per-element scale (around element centre)
+
+    // Apply per-element transforms around element centre
     f32 sx = scaleX(), sy = scaleY();
-    if (sx != 1.0f || sy != 1.0f) {
+    f32 rot = rotation();
+    f32 skx = skewX(), sky = skewY();
+    bool hasTransform = (sx != 1.0f || sy != 1.0f ||
+                         rot != 0.0f || skx != 0.0f || sky != 0.0f);
+    if (hasTransform) {
         f32 cx = m_bounds.width * 0.5f;
         f32 cy = m_bounds.height * 0.5f;
         ctx.translate(cx, cy);
-        ctx.scale(sx, sy);
+        if (rot != 0.0f) ctx.rotate(rot);
+        if (sx != 1.0f || sy != 1.0f) ctx.scale(sx, sy);
+        if (skx != 0.0f || sky != 0.0f) ctx.skew(skx, sky);
         ctx.translate(-cx, -cy);
     }
     
@@ -16553,14 +16581,36 @@ Element* Element::hitTest(Point2f point) {
         return nullptr;
     }
     
-    // Account for per-element scale (centred)
+    // Account for per-element transforms (centred)
     f32 sx = scaleX(), sy = scaleY();
-    if (sx != 1.0f || sy != 1.0f) {
+    f32 rot = rotation();
+    f32 skx = skewX(), sky = skewY();
+    bool hasTransform = (sx != 1.0f || sy != 1.0f ||
+                         rot != 0.0f || skx != 0.0f || sky != 0.0f);
+    if (hasTransform) {
         f32 cx = m_bounds.width * 0.5f;
         f32 cy = m_bounds.height * 0.5f;
-        // Inverse of: translate(cx,cy) * scale(sx,sy) * translate(-cx,-cy)
-        point.x = (point.x - cx) / sx + cx;
-        point.y = (point.y - cy) / sy + cy;
+
+        // Build the forward 2x2 matrix: R(rot) * S(sx,sy) * Sk(skx,sky)
+        f32 cs = std::cos(rot), sn = std::sin(rot);
+        f32 tx = std::tan(skx), ty = std::tan(sky);
+        // R * S = [cs*sx  -sn*sy; sn*sx  cs*sy]
+        // (R*S) * Sk = [cs*sx - sn*sy*ty    cs*sx*tx - sn*sy;
+        //               sn*sx + cs*sy*ty    sn*sx*tx + cs*sy]
+        f32 a = cs * sx - sn * sy * ty;
+        f32 b = cs * sx * tx - sn * sy;
+        f32 c = sn * sx + cs * sy * ty;
+        f32 d = sn * sx * tx + cs * sy;
+
+        // Inverse of 2x2 [a b; c d]
+        f32 det = a * d - b * c;
+        if (std::abs(det) > 1e-6f) {
+            f32 inv = 1.0f / det;
+            f32 px = point.x - cx;
+            f32 py = point.y - cy;
+            point.x = (d * px - b * py) * inv + cx;
+            point.y = (-c * px + a * py) * inv + cy;
+        }
     }
     
     if (!containsPoint(point)) {

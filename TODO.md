@@ -37,7 +37,7 @@
 - [x] Inset / inner shadows — drawInsetShadow with per-vertex alpha ring, Panel insetShadow properties
 - [x] Path rendering — Path flattening (quad/cubic/arc subdivision), ear-clipping fill, polyline stroke
 - [x] Polylines — drawPolyline with miter/bevel/round joins, flat/square/round caps, fillPolygon via ear-clipping
-- [x] Transforms — per-element scaleX/scaleY (centre-origin), inverse hit-test; rotation/skew punted
+- [x] Transforms — per-element scaleX/scaleY/rotation/skewX/skewY (centre-origin), full affine matrix, inverse hit-test
 - [x] Backdrop blur / frosted glass
 - [p] Blend modes — multiply, screen, overlay, etc. (PUNT)
 - [x] 9-slice / 9-patch image rendering — drawImageNineSlice, Image::Stretch::NineSlice, sliceBorders property
