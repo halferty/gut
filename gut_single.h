@@ -1224,6 +1224,15 @@ public:
      */
     bool contains(Point2f point) const;
 
+    /**
+     * @brief Flatten the path into sub-paths of line segments.
+     *
+     * Converts all curves (quad, cubic, arc) into polylines at the
+     * given tolerance.  Each sub-path is a separate vector.
+     * Closed sub-paths have their first point duplicated at the end.
+     */
+    std::vector<std::vector<Point2f>> flatten(f32 tolerance = 0.5f) const;
+
 private:
     void updateBounds(Point2f point);
     
@@ -1960,18 +1969,43 @@ public:
     void drawLine(Point2f p1, Point2f p2, const Pen& pen);
     
     /**
+     * @brief Draw a polyline (connected line segments).
+     *
+     * Proper miter/bevel/round joins and flat/square/round end-caps.
+     */
+    void drawPolyline(const Point2f* points, u32 count, Color color, f32 thickness = 1.0f,
+                      bool closed = false, LineJoin join = LineJoin::Miter,
+                      LineCap cap = LineCap::Flat, f32 miterLimit = 10.0f);
+    void drawPolyline(const std::vector<Point2f>& pts, Color color, f32 thickness = 1.0f,
+                      bool closed = false, LineJoin join = LineJoin::Miter,
+                      LineCap cap = LineCap::Flat, f32 miterLimit = 10.0f);
+    void drawPolyline(const Point2f* points, u32 count, const Pen& pen, bool closed = false);
+
+    /**
+     * @brief Fill a polygon (triangle-fan ear clipping).
+     */
+    void fillPolygon(const Point2f* points, u32 count, Color color);
+    void fillPolygon(const std::vector<Point2f>& pts, Color color);
+
+    /**
      * @brief Fill a triangle.
      */
     void fillTriangle(Point2f p1, Point2f p2, Point2f p3, Color color);
 
     /**
      * @brief Fill a path.
+     *
+     * Flattens curves to polylines, then triangulates each sub-path
+     * via ear-clipping.
      */
     void fillPath(const Path& path, Color color);
     void fillPath(const Path& path, const Brush& brush);
     
     /**
      * @brief Stroke a path.
+     *
+     * Flattens curves to polylines, then strokes each sub-path with
+     * proper thickness, joins, and end-caps.
      */
     void strokePath(const Path& path, Color color, f32 thickness = 1.0f);
     void strokePath(const Path& path, const Pen& pen);
@@ -2098,6 +2132,9 @@ private:
                        f32 blurRadius, f32 offsetX, f32 offsetY);
     void addEllipse(Point2f center, f32 rx, f32 ry, Color color, i32 segments = 32);
     void addLine(Point2f p1, Point2f p2, Color color, f32 thickness);
+    void addPolyline(const Point2f* points, u32 count, Color color, f32 thickness,
+                     bool closed, LineJoin join, LineCap cap, f32 miterLimit);
+    void addFilledPolygon(const Point2f* points, u32 count, Color color);
 
     // Sample a color along a gradient given a normalized t (0=top, 1=bottom)
     Color sampleGradient(Color top, Color bottom, f32 t) {
@@ -11902,6 +11939,119 @@ bool Path::contains(Point2f point) const {
     return (crossings % 2) == 1;
 }
 
+std::vector<std::vector<Point2f>> Path::flatten(f32 tolerance) const {
+    std::vector<std::vector<Point2f>> subPaths;
+    std::vector<Point2f> current;
+    Point2f cursor{};
+    Point2f startPt{};
+
+    // Recursive subdivision helpers
+    auto flattenQuad = [&](Point2f p0, Point2f cp, Point2f p1, f32 tol) {
+        // de Casteljau subdivision
+        struct Rec {
+            std::vector<Point2f>& out;
+            f32 tol;
+            void subdivide(Point2f a, Point2f b, Point2f c, int depth) {
+                f32 mx = (a.x + 2 * b.x + c.x) * 0.25f;
+                f32 my = (a.y + 2 * b.y + c.y) * 0.25f;
+                f32 dx = (a.x + c.x) * 0.5f - mx;
+                f32 dy = (a.y + c.y) * 0.5f - my;
+                if (depth > 8 || (dx * dx + dy * dy) < tol * tol) {
+                    out.push_back(c);
+                    return;
+                }
+                Point2f ab = {(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+                Point2f bc = {(b.x + c.x) * 0.5f, (b.y + c.y) * 0.5f};
+                Point2f abc = {(ab.x + bc.x) * 0.5f, (ab.y + bc.y) * 0.5f};
+                subdivide(a, ab, abc, depth + 1);
+                subdivide(abc, bc, c, depth + 1);
+            }
+        } rec{current, tol};
+        rec.subdivide(p0, cp, p1, 0);
+    };
+
+    auto flattenCubic = [&](Point2f p0, Point2f c1, Point2f c2, Point2f p1, f32 tol) {
+        struct Rec {
+            std::vector<Point2f>& out;
+            f32 tol;
+            void subdivide(Point2f a, Point2f b, Point2f c, Point2f d, int depth) {
+                // Flatness: max distance of control points from the chord a→d
+                f32 ux = 3*b.x - 2*a.x - d.x; f32 uy = 3*b.y - 2*a.y - d.y;
+                f32 vx = 3*c.x - 2*d.x - a.x; f32 vy = 3*c.y - 2*d.y - a.y;
+                ux *= ux; uy *= uy; vx *= vx; vy *= vy;
+                if (ux < vx) ux = vx; if (uy < vy) uy = vy;
+                if (depth > 8 || (ux + uy) < tol * tol * 16) {
+                    out.push_back(d);
+                    return;
+                }
+                Point2f ab  = {(a.x+b.x)*0.5f, (a.y+b.y)*0.5f};
+                Point2f bc  = {(b.x+c.x)*0.5f, (b.y+c.y)*0.5f};
+                Point2f cd  = {(c.x+d.x)*0.5f, (c.y+d.y)*0.5f};
+                Point2f abc = {(ab.x+bc.x)*0.5f, (ab.y+bc.y)*0.5f};
+                Point2f bcd = {(bc.x+cd.x)*0.5f, (bc.y+cd.y)*0.5f};
+                Point2f mid = {(abc.x+bcd.x)*0.5f, (abc.y+bcd.y)*0.5f};
+                subdivide(a, ab, abc, mid, depth+1);
+                subdivide(mid, bcd, cd, d, depth+1);
+            }
+        } rec{current, tol};
+        rec.subdivide(p0, c1, c2, p1, 0);
+    };
+
+    for (const auto& seg : m_segments) {
+        switch (seg.type) {
+        case PathSegmentType::MoveTo:
+            if (!current.empty()) subPaths.push_back(std::move(current));
+            current.clear();
+            cursor = seg.points[0];
+            startPt = cursor;
+            current.push_back(cursor);
+            break;
+        case PathSegmentType::LineTo:
+            current.push_back(seg.points[0]);
+            cursor = seg.points[0];
+            break;
+        case PathSegmentType::QuadTo:
+            flattenQuad(cursor, seg.points[0], seg.points[1], tolerance);
+            cursor = seg.points[1];
+            break;
+        case PathSegmentType::CubicTo:
+            flattenCubic(cursor, seg.points[0], seg.points[1], seg.points[2], tolerance);
+            cursor = seg.points[2];
+            break;
+        case PathSegmentType::ArcTo: {
+            // Arc params are packed: points[0]={rx,ry}, points[1]={rotation,0},
+            // points[2]={x,y=endpoint}, param = largeArc | (sweep<<1)
+            f32 rx = std::abs(seg.points[0].x);
+            f32 ry = std::abs(seg.points[0].y);
+            Point2f endp = seg.points[2];
+            if (rx < 0.001f || ry < 0.001f) {
+                current.push_back(endp);
+                cursor = endp;
+                break;
+            }
+            // Approximate arc with line segments
+            f32 dx = endp.x - cursor.x;
+            f32 dy = endp.y - cursor.y;
+            f32 dist = std::sqrt(dx*dx + dy*dy);
+            i32 steps = std::max(4, (i32)(dist / tolerance));
+            for (i32 i = 1; i <= steps; ++i) {
+                f32 t = (f32)i / (f32)steps;
+                current.push_back({cursor.x + dx*t, cursor.y + dy*t});
+            }
+            cursor = endp;
+            break;
+        }
+        case PathSegmentType::Close:
+            if (!current.empty() && (current.front().x != cursor.x || current.front().y != cursor.y))
+                current.push_back(startPt);
+            cursor = startPt;
+            break;
+        }
+    }
+    if (!current.empty()) subPaths.push_back(std::move(current));
+    return subPaths;
+}
+
 } // namespace gut
 
 
@@ -11939,6 +12089,16 @@ namespace gut {
 
 Pen::Pen(Ref<Brush> brush, f32 thickness)
     : m_brush(std::move(brush))
+{
+    setthickness(thickness);
+    setlineCap(LineCap::Flat);
+    setlineJoin(LineJoin::Miter);
+    setmiterLimit(10.0f);
+    setdashOffset(0.0f);
+}
+
+Pen::Pen(Color color, f32 thickness)
+    : m_brush(makeRef<SolidColorBrush>(color))
 {
     setthickness(thickness);
     setlineCap(LineCap::Flat);
@@ -12534,6 +12694,252 @@ void RenderContext::addLine(Point2f p1, Point2f p2, Color color, f32 thickness) 
     addDrawCommand(DrawCommandType::DrawTriangles, 6);
 }
 
+void RenderContext::addPolyline(const Point2f* pts, u32 count, Color color,
+                                f32 thickness, bool closed, LineJoin join,
+                                LineCap cap, f32 miterLimit) {
+    if (count < 2) return;
+    f32 halfW = thickness * 0.5f;
+    u32 col = packColor(color, m_currentState.opacity);
+
+    // Helper: perpendicular normal for segment a→b (left-hand side)
+    auto segNormal = [](Point2f a, Point2f b) -> Point2f {
+        f32 dx = b.x - a.x, dy = b.y - a.y;
+        f32 len = std::sqrt(dx*dx + dy*dy);
+        if (len < 1e-6f) return {0, 0};
+        return {-dy / len, dx / len};
+    };
+
+    // Build offset contour points (left + right) for each vertex
+    // For a polyline with N points we produce N "left" and N "right" positions.
+    std::vector<Point2f> leftPts(count), rightPts(count);
+
+    auto emitJoint = [&](u32 i, Point2f nPrev, Point2f nNext) {
+        // Miter offset at joint between two segments
+        f32 mx = nPrev.x + nNext.x;
+        f32 my = nPrev.y + nNext.y;
+        f32 mLen2 = mx*mx + my*my;
+        if (mLen2 < 1e-10f) {
+            leftPts[i]  = {pts[i].x + nPrev.x * halfW, pts[i].y + nPrev.y * halfW};
+            rightPts[i] = {pts[i].x - nPrev.x * halfW, pts[i].y - nPrev.y * halfW};
+            return;
+        }
+        // dot(miter, normal) — how far the miter extends
+        f32 dot = mx * nPrev.x + my * nPrev.y;
+        f32 miterLen = halfW / std::max(dot, 1e-6f);
+
+        // Cap miter length
+        if (join == LineJoin::Bevel || (join == LineJoin::Miter && miterLen > miterLimit * halfW)) {
+            // Bevel — average of the two offset positions
+            leftPts[i]  = {pts[i].x + (nPrev.x + nNext.x) * 0.5f * halfW,
+                           pts[i].y + (nPrev.y + nNext.y) * 0.5f * halfW};
+            rightPts[i] = {pts[i].x - (nPrev.x + nNext.x) * 0.5f * halfW,
+                           pts[i].y - (nPrev.y + nNext.y) * 0.5f * halfW};
+        } else {
+            // Miter or Round (round approximated as miter for simplicity)
+            f32 mNorm = 1.0f / std::sqrt(mLen2);
+            f32 nmx = mx * mNorm, nmy = my * mNorm;
+            leftPts[i]  = {pts[i].x + nmx * miterLen, pts[i].y + nmy * miterLen};
+            rightPts[i] = {pts[i].x - nmx * miterLen, pts[i].y - nmy * miterLen};
+        }
+    };
+
+    // Compute per-segment normals
+    std::vector<Point2f> normals(count - 1);
+    for (u32 i = 0; i + 1 < count; ++i) {
+        normals[i] = segNormal(pts[i], pts[i + 1]);
+    }
+
+    if (closed && count >= 3) {
+        // For closed polyline, every vertex has two adjacent segments
+        Point2f nLast = segNormal(pts[count - 1], pts[0]); // wrapping segment
+        // Treat the closing segment + first segment as a joint
+        // We also need the segment from last-1 to last
+        for (u32 i = 0; i < count; ++i) {
+            Point2f nPrev = (i == 0) ? nLast : normals[i - 1];
+            Point2f nNext = (i < count - 1) ? normals[i] : nLast;
+            emitJoint(i, nPrev, nNext);
+        }
+    } else {
+        // Start cap
+        {
+            Point2f n = normals[0];
+            if (cap == LineCap::Square) {
+                // Extend start backward by halfW
+                f32 dx = pts[1].x - pts[0].x, dy = pts[1].y - pts[0].y;
+                f32 len = std::sqrt(dx*dx + dy*dy);
+                f32 tx = 0, ty = 0;
+                if (len > 1e-6f) { tx = -dx/len * halfW; ty = -dy/len * halfW; }
+                leftPts[0]  = {pts[0].x + n.x * halfW + tx, pts[0].y + n.y * halfW + ty};
+                rightPts[0] = {pts[0].x - n.x * halfW + tx, pts[0].y - n.y * halfW + ty};
+            } else {
+                leftPts[0]  = {pts[0].x + n.x * halfW, pts[0].y + n.y * halfW};
+                rightPts[0] = {pts[0].x - n.x * halfW, pts[0].y - n.y * halfW};
+            }
+        }
+        // Interior joints
+        for (u32 i = 1; i + 1 < count; ++i) {
+            emitJoint(i, normals[i - 1], normals[i]);
+        }
+        // End cap
+        {
+            Point2f n = normals[count - 2];
+            u32 e = count - 1;
+            if (cap == LineCap::Square) {
+                f32 dx = pts[e].x - pts[e-1].x, dy = pts[e].y - pts[e-1].y;
+                f32 len = std::sqrt(dx*dx + dy*dy);
+                f32 tx = 0, ty = 0;
+                if (len > 1e-6f) { tx = dx/len * halfW; ty = dy/len * halfW; }
+                leftPts[e]  = {pts[e].x + n.x * halfW + tx, pts[e].y + n.y * halfW + ty};
+                rightPts[e] = {pts[e].x - n.x * halfW + tx, pts[e].y - n.y * halfW + ty};
+            } else {
+                leftPts[e]  = {pts[e].x + n.x * halfW, pts[e].y + n.y * halfW};
+                rightPts[e] = {pts[e].x - n.x * halfW, pts[e].y - n.y * halfW};
+            }
+        }
+    }
+
+    // Emit triangle strip: for each segment i→i+1, we have a quad
+    // (left[i], right[i], right[i+1], left[i+1])
+    u32 segCount = closed ? count : (count - 1);
+    std::vector<Vertex> verts(segCount * 4);
+    std::vector<u32> inds(segCount * 6);
+
+    for (u32 i = 0; i < segCount; ++i) {
+        u32 j = (i + 1) % count;
+        Point2f tl = transformPoint(leftPts[i]);
+        Point2f tr = transformPoint(rightPts[i]);
+        Point2f br = transformPoint(rightPts[j]);
+        Point2f bl = transformPoint(leftPts[j]);
+        u32 vi = i * 4;
+        verts[vi + 0] = {tl.x, tl.y, 0, 0, col};
+        verts[vi + 1] = {tr.x, tr.y, 0, 1, col};
+        verts[vi + 2] = {br.x, br.y, 1, 1, col};
+        verts[vi + 3] = {bl.x, bl.y, 1, 0, col};
+        u32 ii = i * 6;
+        inds[ii + 0] = vi; inds[ii + 1] = vi + 1; inds[ii + 2] = vi + 2;
+        inds[ii + 3] = vi; inds[ii + 4] = vi + 2; inds[ii + 5] = vi + 3;
+    }
+
+    u32 vertOffset = addVertices(verts.data(), static_cast<u32>(verts.size()));
+    addIndices(inds.data(), static_cast<u32>(inds.size()), vertOffset);
+    addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(inds.size()));
+
+    // Round caps: emit triangle fans at endpoints
+    if (!closed && cap == LineCap::Round) {
+        const i32 capSegs = 8;
+        auto emitRoundCap = [&](Point2f center, Point2f leftP, Point2f rightP) {
+            std::vector<Vertex> cv(capSegs + 2);
+            std::vector<u32> ci(capSegs * 3);
+            Point2f tc = transformPoint(center);
+            cv[0] = {tc.x, tc.y, 0.5f, 0.5f, col};
+            // Arc from leftP to rightP through 180 degrees
+            f32 ax = leftP.x - center.x, ay = leftP.y - center.y;
+            f32 bx = rightP.x - center.x, by = rightP.y - center.y;
+            for (i32 s = 0; s <= capSegs; ++s) {
+                f32 t = (f32)s / (f32)capSegs;
+                f32 cosA = std::cos(PI * t);
+                f32 sinA = std::sin(PI * t);
+                // Rotate the left-offset vector
+                f32 px = center.x + ax * cosA - ay * sinA;
+                f32 py = center.y + ax * sinA + ay * cosA;
+                Point2f tp = transformPoint({px, py});
+                cv[1 + s] = {tp.x, tp.y, 0, 0, col};
+            }
+            for (i32 s = 0; s < capSegs; ++s) {
+                ci[s*3 + 0] = 0;
+                ci[s*3 + 1] = 1 + s;
+                ci[s*3 + 2] = 2 + s;
+            }
+            u32 vo = addVertices(cv.data(), static_cast<u32>(cv.size()));
+            addIndices(ci.data(), static_cast<u32>(ci.size()), vo);
+            addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(ci.size()));
+        };
+        emitRoundCap(pts[0], leftPts[0], rightPts[0]);
+        emitRoundCap(pts[count-1], rightPts[count-1], leftPts[count-1]);
+    }
+}
+
+void RenderContext::addFilledPolygon(const Point2f* pts, u32 count, Color color) {
+    // Ear-clipping triangulation
+    if (count < 3) return;
+    u32 col = packColor(color, m_currentState.opacity);
+
+    // Build vertex list
+    std::vector<Vertex> verts(count);
+    for (u32 i = 0; i < count; ++i) {
+        Point2f tp = transformPoint(pts[i]);
+        verts[i] = {tp.x, tp.y, 0, 0, col};
+    }
+    u32 vertOffset = addVertices(verts.data(), count);
+
+    // Ear clipping on untransformed polygon
+    std::vector<u32> remaining(count);
+    for (u32 i = 0; i < count; ++i) remaining[i] = i;
+
+    auto cross2d = [](Point2f a, Point2f b, Point2f c) -> f32 {
+        return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    };
+
+    auto pointInTriangle = [&](Point2f p, Point2f a, Point2f b, Point2f c) -> bool {
+        f32 d1 = cross2d(a, b, p);
+        f32 d2 = cross2d(b, c, p);
+        f32 d3 = cross2d(c, a, p);
+        bool hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+        bool hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+        return !(hasNeg && hasPos);
+    };
+
+    // Determine winding
+    f32 area = 0;
+    for (u32 i = 0; i < count; ++i) {
+        u32 j = (i + 1) % count;
+        area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+    }
+    bool ccw = area > 0;
+
+    std::vector<u32> indices;
+    indices.reserve((count - 2) * 3);
+
+    while (remaining.size() > 2) {
+        bool earFound = false;
+        u32 n = static_cast<u32>(remaining.size());
+        for (u32 i = 0; i < n; ++i) {
+            u32 prev = remaining[(i + n - 1) % n];
+            u32 curr = remaining[i];
+            u32 next = remaining[(i + 1) % n];
+
+            f32 c = cross2d(pts[prev], pts[curr], pts[next]);
+            bool isConvex = ccw ? (c > 0) : (c < 0);
+            if (!isConvex) continue;
+
+            // Check no other vertex inside this triangle
+            bool isEar = true;
+            for (u32 j = 0; j < n; ++j) {
+                u32 vi = remaining[j];
+                if (vi == prev || vi == curr || vi == next) continue;
+                if (pointInTriangle(pts[vi], pts[prev], pts[curr], pts[next])) {
+                    isEar = false;
+                    break;
+                }
+            }
+            if (isEar) {
+                indices.push_back(prev);
+                indices.push_back(curr);
+                indices.push_back(next);
+                remaining.erase(remaining.begin() + i);
+                earFound = true;
+                break;
+            }
+        }
+        if (!earFound) break; // Degenerate
+    }
+
+    if (!indices.empty()) {
+        addIndices(indices.data(), static_cast<u32>(indices.size()), vertOffset);
+        addDrawCommand(DrawCommandType::DrawTriangles, static_cast<u32>(indices.size()));
+    }
+}
+
 // Drawing primitives
 
 void RenderContext::fillTriangle(Point2f p1, Point2f p2, Point2f p3, Color color) {
@@ -12992,9 +13398,44 @@ void RenderContext::drawLine(Point2f p1, Point2f p2, const Pen& pen) {
     }
 }
 
+// --- Polylines ---
+
+void RenderContext::drawPolyline(const Point2f* points, u32 count, Color color,
+                                 f32 thickness, bool closed, LineJoin join,
+                                 LineCap cap, f32 miterLimit) {
+    addPolyline(points, count, color, thickness, closed, join, cap, miterLimit);
+}
+
+void RenderContext::drawPolyline(const std::vector<Point2f>& pts, Color color,
+                                 f32 thickness, bool closed, LineJoin join,
+                                 LineCap cap, f32 miterLimit) {
+    drawPolyline(pts.data(), static_cast<u32>(pts.size()), color, thickness, closed, join, cap, miterLimit);
+}
+
+void RenderContext::drawPolyline(const Point2f* points, u32 count, const Pen& pen, bool closed) {
+    if (pen.brush() && pen.brush()->type() == BrushType::Solid) {
+        auto& solid = static_cast<const SolidColorBrush&>(*pen.brush());
+        drawPolyline(points, count, solid.color(), pen.thickness(), closed,
+                     pen.lineJoin(), pen.lineCap(), pen.miterLimit());
+    }
+}
+
+void RenderContext::fillPolygon(const Point2f* points, u32 count, Color color) {
+    addFilledPolygon(points, count, color);
+}
+
+void RenderContext::fillPolygon(const std::vector<Point2f>& pts, Color color) {
+    fillPolygon(pts.data(), static_cast<u32>(pts.size()), color);
+}
+
+// --- Path rendering ---
+
 void RenderContext::fillPath(const Path& path, Color color) {
-    // Simplified: draw bounding rect
-    addRect(path.bounds(), color);
+    auto subPaths = path.flatten(0.5f);
+    for (auto& sp : subPaths) {
+        if (sp.size() >= 3)
+            addFilledPolygon(sp.data(), static_cast<u32>(sp.size()), color);
+    }
 }
 
 void RenderContext::fillPath(const Path& path, const Brush& brush) {
@@ -13005,14 +13446,33 @@ void RenderContext::fillPath(const Path& path, const Brush& brush) {
 }
 
 void RenderContext::strokePath(const Path& path, Color color, f32 thickness) {
-    // Simplified: stroke bounding rect
-    strokeRect(path.bounds(), color, thickness);
+    auto subPaths = path.flatten(0.5f);
+    for (auto& sp : subPaths) {
+        if (sp.size() < 2) continue;
+        // Detect if sub-path is closed (first == last)
+        bool closed = (sp.size() >= 3 &&
+                       std::abs(sp.front().x - sp.back().x) < 0.01f &&
+                       std::abs(sp.front().y - sp.back().y) < 0.01f);
+        if (closed) sp.pop_back(); // remove duplicate closing point
+        addPolyline(sp.data(), static_cast<u32>(sp.size()), color, thickness,
+                    closed, LineJoin::Miter, LineCap::Flat, 10.0f);
+    }
 }
 
 void RenderContext::strokePath(const Path& path, const Pen& pen) {
     if (pen.brush() && pen.brush()->type() == BrushType::Solid) {
         auto& solid = static_cast<const SolidColorBrush&>(*pen.brush());
-        strokePath(path, solid.color(), pen.thickness());
+        auto subPaths = path.flatten(0.5f);
+        for (auto& sp : subPaths) {
+            if (sp.size() < 2) continue;
+            bool closed = (sp.size() >= 3 &&
+                           std::abs(sp.front().x - sp.back().x) < 0.01f &&
+                           std::abs(sp.front().y - sp.back().y) < 0.01f);
+            if (closed) sp.pop_back();
+            addPolyline(sp.data(), static_cast<u32>(sp.size()), solid.color(),
+                        pen.thickness(), closed, pen.lineJoin(), pen.lineCap(),
+                        pen.miterLimit());
+        }
     }
 }
 

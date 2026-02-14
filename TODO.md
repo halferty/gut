@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 62 done, 10 partial, 0 missing** out of 67 core features.
+**Score: 64 done, 8 partial, 0 missing** out of 67 core features.
 
 ---
 
@@ -35,8 +35,8 @@
 - [x] Image / texture — drawImage, Image element, stretch modes
 - [x] Radial gradients — RadialGradientBrush with multi-stop support, rect/rounded-rect/ellipse rendering
 - [x] Inset / inner shadows — drawInsetShadow with per-vertex alpha ring, Panel insetShadow properties
-- [ ] Path rendering — Path class fully designed, fill/stroke stubbed (draw bounding rect only)
-- [ ] Polylines — only single line segments, no multi-segment API
+- [x] Path rendering — Path flattening (quad/cubic/arc subdivision), ear-clipping fill, polyline stroke
+- [x] Polylines — drawPolyline with miter/bevel/round joins, flat/square/round caps, fillPolygon via ear-clipping
 - [ ] Transforms — rotation, scale, skew on elements
 - [x] Backdrop blur / frosted glass
 - [ ] Blend modes — multiply, screen, overlay, etc.

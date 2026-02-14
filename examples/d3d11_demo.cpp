@@ -76,6 +76,27 @@ static bool InitD3D11(HWND hwnd) {
 // Build Gut UI
 // ============================================================================
 
+// Shorthand colour helper (file scope for use in callbacks)
+static gut::Color cc(gut::u8 r, gut::u8 g, gut::u8 b, gut::u8 a = 255) {
+    return gut::Color::fromRgba8(r, g, b, a);
+}
+
+// Custom panel that takes a draw callback for the Drawing demo tab.
+class DrawCanvas : public gut::Panel {
+    GUT_OBJECT(DrawCanvas, gut::Panel)
+public:
+    using DrawFn = std::function<void(gut::RenderContext&, gut::Rectf)>;
+    DrawFn drawCallback;
+
+    void onRender(gut::RenderContext& ctx) override {
+        Panel::onRender(ctx);
+        if (drawCallback) {
+            gut::Rectf r = {0, 0, bounds().width, bounds().height};
+            drawCallback(ctx, r);
+        }
+    }
+};
+
 static void BuildUI() {
     using namespace gut;
 
@@ -1237,6 +1258,206 @@ static void BuildUI() {
         page->addChild(col2);
 
         tabs->addTab("Layouts 2", page);
+    }
+
+    // =================================================================
+    // TAB 6 — Drawing (Polylines & Paths)
+    // =================================================================
+    {
+        auto page = makeRef<StackPanel>(Orientation::Horizontal);
+        page->setmargin(Thickness{24, 24, 24, 24});
+        page->setspacing(20.0f);
+
+        // --- Column 1: Polylines ---
+        auto col1 = makeRef<StackPanel>(Orientation::Vertical);
+        col1->setspacing(20.0f);
+
+        { // Polyline basics card
+            auto card = makeCard(340.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Polylines"));
+            inner->addChild(makeLabel("Connected line segments with joins & caps"));
+
+            auto canvas = makeRef<DrawCanvas>();
+            canvas->setwidth(308.0f);
+            canvas->setheight(200.0f);
+            canvas->setmargin(Thickness{0, 10, 0, 0});
+            canvas->setbackground(c(22, 24, 34));
+            canvas->setcornerRadius(4.0f);
+            canvas->setclipToBounds(true);
+            canvas->drawCallback = [](RenderContext& ctx, Rectf r) {
+                // Zigzag polyline
+                Point2f zigzag[] = {
+                    {20,  170}, {60,  40}, {100, 160}, {140,  50},
+                    {180,  150}, {220, 30}, {260, 140}, {290, 60}
+                };
+                ctx.drawPolyline(zigzag, 8, cc(80, 200, 255), 3.0f, false,
+                                 LineJoin::Round, LineCap::Round);
+
+                // Closed triangle
+                Point2f tri[] = {{80, 180}, {50, 130}, {110, 130}};
+                ctx.drawPolyline(tri, 3, cc(255, 180, 60), 2.0f, true,
+                                 LineJoin::Miter, LineCap::Flat);
+            };
+            inner->addChild(canvas);
+            card->addChild(inner);
+            col1->addChild(card);
+        }
+
+        { // Filled polygons card
+            auto card = makeCard(340.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Filled Polygons"));
+            inner->addChild(makeLabel("Ear-clipping triangulation"));
+
+            auto canvas = makeRef<DrawCanvas>();
+            canvas->setwidth(308.0f);
+            canvas->setheight(200.0f);
+            canvas->setmargin(Thickness{0, 10, 0, 0});
+            canvas->setbackground(c(22, 24, 34));
+            canvas->setcornerRadius(4.0f);
+            canvas->setclipToBounds(true);
+            canvas->drawCallback = [](RenderContext& ctx, Rectf r) {
+                // Star polygon
+                Point2f star[10];
+                for (int i = 0; i < 10; ++i) {
+                    float angle = (float)i * 3.14159f * 2.0f / 10.0f - 3.14159f / 2.0f;
+                    float rad = (i % 2 == 0) ? 70.0f : 30.0f;
+                    star[i] = {100 + rad * cosf(angle), 100 + rad * sinf(angle)};
+                }
+                ctx.fillPolygon(star, 10, cc(200, 80, 255, 180));
+                ctx.drawPolyline(star, 10, cc(220, 120, 255), 1.5f, true);
+
+                // Convex pentagon
+                Point2f pent[5];
+                for (int i = 0; i < 5; ++i) {
+                    float angle = (float)i * 3.14159f * 2.0f / 5.0f - 3.14159f / 2.0f;
+                    pent[i] = {240 + 50*cosf(angle), 100 + 50*sinf(angle)};
+                }
+                ctx.fillPolygon(pent, 5, cc(60, 200, 120, 180));
+                ctx.drawPolyline(pent, 5, cc(100, 240, 160), 1.5f, true);
+            };
+            inner->addChild(canvas);
+            card->addChild(inner);
+            col1->addChild(card);
+        }
+
+        page->addChild(col1);
+
+        // --- Column 2: Paths ---
+        auto col2 = makeRef<StackPanel>(Orientation::Vertical);
+        col2->setspacing(20.0f);
+
+        { // Path fill card
+            auto card = makeCard(340.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Path Fill"));
+            inner->addChild(makeLabel("Bezier curves flattened & triangulated"));
+
+            auto canvas = makeRef<DrawCanvas>();
+            canvas->setwidth(308.0f);
+            canvas->setheight(200.0f);
+            canvas->setmargin(Thickness{0, 10, 0, 0});
+            canvas->setbackground(c(22, 24, 34));
+            canvas->setcornerRadius(4.0f);
+            canvas->setclipToBounds(true);
+            canvas->drawCallback = [](RenderContext& ctx, Rectf r) {
+                // Heart shape using cubic beziers
+                auto heart = makeRef<Path>();
+                heart->moveTo(154, 80);
+                heart->cubicTo(154, 60, 130, 30, 100, 30);
+                heart->cubicTo(55, 30, 20, 70, 20, 110);
+                heart->cubicTo(20, 170, 100, 200, 154, 230);
+                heart->cubicTo(208, 200, 288, 170, 288, 110);
+                heart->cubicTo(288, 70, 253, 30, 208, 30);
+                heart->cubicTo(178, 30, 154, 60, 154, 80);
+                heart->close();
+                ctx.fillPath(*heart, cc(220, 60, 80, 200));
+
+                // Rounded rect via path
+                auto rr = makeRef<Path>();
+                rr->addRoundedRect({20, 150, 80, 40}, 10);
+                ctx.fillPath(*rr, cc(60, 140, 220, 180));
+            };
+            inner->addChild(canvas);
+            card->addChild(inner);
+            col2->addChild(card);
+        }
+
+        { // Path stroke card
+            auto card = makeCard(340.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Path Stroke"));
+            inner->addChild(makeLabel("Thick stroked curves with join styles"));
+
+            auto canvas = makeRef<DrawCanvas>();
+            canvas->setwidth(308.0f);
+            canvas->setheight(200.0f);
+            canvas->setmargin(Thickness{0, 10, 0, 0});
+            canvas->setbackground(c(22, 24, 34));
+            canvas->setcornerRadius(4.0f);
+            canvas->setclipToBounds(true);
+            canvas->drawCallback = [](RenderContext& ctx, Rectf r) {
+                // S-curve
+                auto wave = makeRef<Path>();
+                wave->moveTo(20, 100);
+                wave->cubicTo(80, 20, 140, 180, 200, 100);
+                wave->cubicTo(240, 50, 260, 50, 290, 100);
+                ctx.strokePath(*wave, cc(255, 200, 60), 4.0f);
+
+                // Ellipse via path
+                auto ell = makeRef<Path>();
+                ell->addEllipse({154, 140}, 80, 30);
+                ctx.strokePath(*ell, cc(100, 220, 200), 2.5f);
+
+                // Circle via path
+                auto circ = makeRef<Path>();
+                circ->addCircle({80, 60}, 30);
+                ctx.strokePath(*circ, cc(200, 100, 255), 3.0f);
+            };
+            inner->addChild(canvas);
+            card->addChild(inner);
+            col2->addChild(card);
+        }
+
+        { // Mixed fill + stroke card
+            auto card = makeCard(340.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Fill + Stroke"));
+            inner->addChild(makeLabel("Combining filled and stroked paths"));
+
+            auto canvas = makeRef<DrawCanvas>();
+            canvas->setwidth(308.0f);
+            canvas->setheight(160.0f);
+            canvas->setmargin(Thickness{0, 10, 0, 0});
+            canvas->setbackground(c(22, 24, 34));
+            canvas->setcornerRadius(4.0f);
+            canvas->setclipToBounds(true);
+            canvas->drawCallback = [](RenderContext& ctx, Rectf r) {
+                // Filled + stroked rounded rect
+                auto rr = makeRef<Path>();
+                rr->addRoundedRect({20, 20, 120, 120}, 16);
+                ctx.fillPath(*rr, cc(60, 80, 140, 180));
+                ctx.strokePath(*rr, cc(120, 160, 240), 2.5f);
+
+                // Filled + stroked circle
+                auto ci = makeRef<Path>();
+                ci->addCircle({230, 80}, 50);
+                ctx.fillPath(*ci, cc(140, 60, 120, 180));
+                ctx.strokePath(*ci, cc(220, 120, 200), 2.5f);
+            };
+            inner->addChild(canvas);
+            card->addChild(inner);
+            col2->addChild(card);
+        }
+
+        page->addChild(col2);
+        tabs->addTab("Drawing", page);
     }
 
     root->addChild(tabs);
