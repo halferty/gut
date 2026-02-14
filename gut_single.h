@@ -4736,6 +4736,62 @@ private:
 } // namespace gut
 
 
+// --- gut/elements/ProgressBar.h ---
+
+namespace gut {
+
+/**
+ * @brief A progress bar control that displays a completion percentage.
+ *
+ * Supports determinate (0–100%) and indeterminate (animated pulse) modes,
+ * optional text label, and customisable colours.
+ */
+class ProgressBar : public Element {
+    GUT_OBJECT(ProgressBar, Element)
+
+public:
+    explicit ProgressBar(f32 initialValue = 0.0f);
+
+    // -------------------------------------------------------------------------
+    // Value
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, value, 0.0f)        // 0 – 100
+    GUT_PROPERTY(f32, minimum, 0.0f)
+    GUT_PROPERTY(f32, maximum, 100.0f)
+    GUT_PROPERTY(bool, indeterminate, false)  // animated pulse mode
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, barHeight, 8.0f)
+    GUT_PROPERTY(f32, preferredWidth, 250.0f)
+    GUT_PROPERTY(f32, cornerRadius, 4.0f)
+    GUT_PROPERTY(f32, fontSize, 10.0f)
+
+    // Colours
+    GUT_PROPERTY(Color, trackColor, Color::fromHex(0x3C3C4A))
+    GUT_PROPERTY(Color, trackBorderColor, Color::fromHex(0x505060))
+    GUT_PROPERTY(Color, fillColor, Color::fromRgba8(80, 150, 240, 255))
+    GUT_PROPERTY(Color, completedFillColor, Color::fromRgba8(60, 190, 80, 255))
+    GUT_PROPERTY(Color, labelColor, Color::fromHex(0xC0C0D0))
+
+    // Show percentage text
+    GUT_PROPERTY(bool, showLabel, false)
+    GUT_PROPERTY(bool, showPercentInBar, false)  // draw % centred inside bar
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+
+private:
+    f32 normalizedValue() const;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/DropDown.h ---
 
 
@@ -16468,6 +16524,122 @@ void Slider::onMouseLeave() {
     Element::onMouseLeave();
     if (!m_dragging) setisPressed(false);
     invalidateRender();
+}
+
+} // namespace gut
+
+
+// --- elements/ProgressBar.cpp ---
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
+namespace gut {
+
+ProgressBar::ProgressBar(f32 initialValue) {
+    setvalue(initialValue);
+    setisHitTestVisible(false);  // purely visual by default
+}
+
+f32 ProgressBar::normalizedValue() const {
+    f32 range = maximum() - minimum();
+    if (range <= 0.0f) return 0.0f;
+    return std::clamp((value() - minimum()) / range, 0.0f, 1.0f);
+}
+
+Size2f ProgressBar::measureOverride(Size2f /*availableSize*/) {
+    f32 h = barHeight();
+    // If showing label below, add space for text
+    if (showLabel() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                h += face->lineHeight() + 4.0f;
+            }
+        }
+    }
+    return {preferredWidth(), h};
+}
+
+void ProgressBar::onRender(RenderContext& ctx) {
+    f32 bw = bounds().width;
+    f32 bh = barHeight();
+    f32 cr = cornerRadius();
+    f32 norm = normalizedValue();
+    bool complete = (norm >= 1.0f);
+
+    // --- Track background ---
+    Rectf trackRect = {0, 0, bw, bh};
+    ctx.fillRoundedRect(trackRect, cr, trackColor());
+    ctx.strokeRoundedRect(trackRect, cr, trackBorderColor(), 0.5f);
+
+    // --- Fill ---
+    if (!indeterminate()) {
+        f32 fillW = bw * norm;
+        if (fillW > 1.0f) {
+            // Clamp corner radius so it doesn't exceed the fill width
+            f32 fcr = std::min(cr, fillW * 0.5f);
+            Rectf fillRect = {0, 0, fillW, bh};
+            Color fc = complete ? completedFillColor() : fillColor();
+            ctx.fillRoundedRect(fillRect, fcr, fc);
+        }
+    } else {
+        // Indeterminate: draw a sliding highlight pulse
+        // Use a simple time-based animation via the current value modulo
+        f32 pulseW = bw * 0.3f;
+        // Animate based on a trick: we read `value()` as a frame counter driven externally,
+        // or just draw a static centred bar if no animation driver.
+        f32 t = std::fmod(value() * 0.02f, 1.4f) - 0.2f;  // -0.2 .. 1.2
+        f32 px = t * bw;
+        f32 pw = std::min(pulseW, bw);
+        // Clip to bar bounds
+        f32 x0 = std::max(0.0f, px);
+        f32 x1 = std::min(bw, px + pw);
+        if (x1 > x0) {
+            Rectf pulseRect = {x0, 0, x1 - x0, bh};
+            ctx.fillRoundedRect(pulseRect, std::min(cr, (x1 - x0) * 0.5f), fillColor());
+        }
+    }
+
+    // --- Percentage text centred in bar ---
+    if (showPercentInBar() && !indeterminate() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                char buf[16];
+                std::snprintf(buf, sizeof(buf), "%.0f%%", norm * 100.0f);
+                String label(buf);
+                f32 tw = face->measureWidth(label);
+                f32 tx = (bw - tw) * 0.5f;
+                f32 ty = (bh - face->lineHeight()) * 0.5f + face->ascender();
+                // Use white or dark text depending on fill coverage
+                Color tc = (norm > 0.5f) ? Color::white() : labelColor();
+                ctx.drawText(face.get(), label, {tx, ty}, tc);
+            }
+        }
+    }
+
+    // --- Label below bar ---
+    if (showLabel() && !showPercentInBar() && context()) {
+        Font* font = context()->defaultFont();
+        if (font) {
+            auto face = font->getFace(fontSize());
+            if (face) {
+                char buf[16];
+                if (indeterminate()) {
+                    std::snprintf(buf, sizeof(buf), "Loading...");
+                } else {
+                    std::snprintf(buf, sizeof(buf), "%.0f%%", norm * 100.0f);
+                }
+                String label(buf);
+                f32 ty = bh + 4.0f + face->ascender();
+                ctx.drawText(face.get(), label, {0, ty}, labelColor());
+            }
+        }
+    }
 }
 
 } // namespace gut

@@ -176,7 +176,7 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         Canvas::setLeft(*title, 30);
         Canvas::setTop(*title, 24);
 
-        auto subtitle = make<Text>("Interactive control showcase  \u2014  TextBox, Button, CheckBox, RadioButton, Toggle, Slider, DropDown, TabControl", 11.0f);
+        auto subtitle = make<Text>("Interactive control showcase  \u2014  TextBox, Button, CheckBox, RadioButton, Toggle, Slider, ProgressBar, DropDown, TabControl", 11.0f);
         subtitle->setforeground(c(130, 130, 150));
         subtitle->setisHitTestVisible(false);
         root->addChild(subtitle);
@@ -1136,6 +1136,197 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         }
 
         tabControl->addTab("Toggle & Slider", page);
+    }
+
+    // =====================================================================
+    // TAB 4 — "ProgressBar"
+    // =====================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(W - 40);
+        page->setheight(H - 95 - 34);
+
+        f32 sx = 20, sy = 15;
+
+        auto sectionLabel = make<Text>("ProgressBar", 15.0f);
+        sectionLabel->setforeground(c(200, 200, 220));
+        sectionLabel->setisHitTestVisible(false);
+        page->addChild(sectionLabel);
+        Canvas::setLeft(*sectionLabel, sx);
+        Canvas::setTop(*sectionLabel, sy);
+
+        auto desc = make<Text>("Determinate and indeterminate progress indicators", 11.0f);
+        desc->setforeground(c(120, 120, 140));
+        desc->setisHitTestVisible(false);
+        page->addChild(desc);
+        Canvas::setLeft(*desc, sx);
+        Canvas::setTop(*desc, sy + 24);
+
+        // 1. Basic progress bar at 0%
+        auto lbl1 = make<Text>("Download  (0%)", 11.0f);
+        lbl1->setforeground(c(160, 160, 180));
+        lbl1->setisHitTestVisible(false);
+        page->addChild(lbl1);
+        Canvas::setLeft(*lbl1, sx);
+        Canvas::setTop(*lbl1, sy + 60);
+
+        auto pb1 = make<ProgressBar>(0.0f);
+        pb1->setpreferredWidth(350.0f);
+        pb1->setshowLabel(true);
+        page->addChild(pb1);
+        Canvas::setLeft(*pb1, sx);
+        Canvas::setTop(*pb1, sy + 80);
+
+        // 2. 35% — blue with label below
+        auto lbl2 = make<Text>("Uploading...", 11.0f);
+        lbl2->setforeground(c(160, 160, 180));
+        lbl2->setisHitTestVisible(false);
+        page->addChild(lbl2);
+        Canvas::setLeft(*lbl2, sx);
+        Canvas::setTop(*lbl2, sy + 114);
+
+        auto pb2 = make<ProgressBar>(35.0f);
+        pb2->setpreferredWidth(350.0f);
+        pb2->setshowLabel(true);
+        page->addChild(pb2);
+        Canvas::setLeft(*pb2, sx);
+        Canvas::setTop(*pb2, sy + 134);
+
+        // 3. 72% — green fill, % inside bar
+        auto lbl3 = make<Text>("Installing...", 11.0f);
+        lbl3->setforeground(c(160, 160, 180));
+        lbl3->setisHitTestVisible(false);
+        page->addChild(lbl3);
+        Canvas::setLeft(*lbl3, sx);
+        Canvas::setTop(*lbl3, sy + 168);
+
+        auto pb3 = make<ProgressBar>(72.0f);
+        pb3->setpreferredWidth(350.0f);
+        pb3->setbarHeight(18.0f);
+        pb3->setcornerRadius(9.0f);
+        pb3->setfillColor(c(60, 180, 120));
+        pb3->setcompletedFillColor(c(60, 190, 80));
+        pb3->setshowPercentInBar(true);
+        pb3->setfontSize(11.0f);
+        page->addChild(pb3);
+        Canvas::setLeft(*pb3, sx);
+        Canvas::setTop(*pb3, sy + 188);
+
+        // 4. 100% complete
+        auto lbl4 = make<Text>("Complete!", 11.0f);
+        lbl4->setforeground(c(100, 200, 120));
+        lbl4->setisHitTestVisible(false);
+        page->addChild(lbl4);
+        Canvas::setLeft(*lbl4, sx);
+        Canvas::setTop(*lbl4, sy + 224);
+
+        auto pb4 = make<ProgressBar>(100.0f);
+        pb4->setpreferredWidth(350.0f);
+        pb4->setbarHeight(12.0f);
+        pb4->setcornerRadius(6.0f);
+        pb4->setshowLabel(true);
+        page->addChild(pb4);
+        Canvas::setLeft(*pb4, sx);
+        Canvas::setTop(*pb4, sy + 244);
+
+        // --- Right column: Interactive slider-driven progress ---
+
+        f32 rx = 420, ry = 60;
+
+        auto interLabel = make<Text>("Interactive  \u2014  drive with slider", 13.0f);
+        interLabel->setforeground(c(200, 200, 220));
+        interLabel->setisHitTestVisible(false);
+        page->addChild(interLabel);
+        Canvas::setLeft(*interLabel, rx);
+        Canvas::setTop(*interLabel, sy);
+
+        // Tall themed progress bar
+        auto pb5 = make<ProgressBar>(50.0f);
+        pb5->setpreferredWidth(300.0f);
+        pb5->setbarHeight(22.0f);
+        pb5->setcornerRadius(11.0f);
+        pb5->setfillColor(c(200, 120, 240));
+        pb5->setcompletedFillColor(c(120, 220, 80));
+        pb5->setshowPercentInBar(true);
+        pb5->setfontSize(12.0f);
+        page->addChild(pb5);
+        Canvas::setLeft(*pb5, rx);
+        Canvas::setTop(*pb5, ry);
+
+        // Slider to drive it
+        auto driver = make<Slider>(50.0f);
+        driver->settabIndex(80);
+        driver->setminimum(0.0f);
+        driver->setmaximum(100.0f);
+        driver->setstep(1.0f);
+        driver->setshowValue(true);
+        driver->setpreferredWidth(300.0f);
+        driver->settrackFillColor(c(200, 120, 240));
+        page->addChild(driver);
+        Canvas::setLeft(*driver, rx);
+        Canvas::setTop(*driver, ry + 36);
+
+        auto statusText = make<Text>("Drag the slider to change progress", 10.0f);
+        statusText->setforeground(c(110, 110, 130));
+        statusText->setisHitTestVisible(false);
+        page->addChild(statusText);
+        Canvas::setLeft(*statusText, rx);
+        Canvas::setTop(*statusText, ry + 66);
+
+        driver->setOnValueChanged([pb5, statusText](f32 v) {
+            pb5->setvalue(v);
+            pb5->invalidateRender();
+            char buf[64];
+            if (v >= 100.0f) {
+                std::snprintf(buf, sizeof(buf), "\xe2\x9c\x93 Complete!");
+                statusText->setforeground(gut::Color::fromRgba8(100, 220, 100));
+            } else {
+                std::snprintf(buf, sizeof(buf), "Progress: %.0f%%", v);
+                statusText->setforeground(gut::Color::fromRgba8(200, 140, 240));
+            }
+            statusText->settext(buf);
+        });
+
+        // Themed variants — thin bars
+        auto themeLabel = make<Text>("Themed variants", 11.0f);
+        themeLabel->setforeground(c(160, 160, 180));
+        themeLabel->setisHitTestVisible(false);
+        page->addChild(themeLabel);
+        Canvas::setLeft(*themeLabel, rx);
+        Canvas::setTop(*themeLabel, ry + 100);
+
+        // Red / warning
+        auto pbRed = make<ProgressBar>(85.0f);
+        pbRed->setpreferredWidth(300.0f);
+        pbRed->setbarHeight(6.0f);
+        pbRed->setcornerRadius(3.0f);
+        pbRed->setfillColor(c(220, 70, 70));
+        pbRed->setcompletedFillColor(c(220, 70, 70));
+        page->addChild(pbRed);
+        Canvas::setLeft(*pbRed, rx);
+        Canvas::setTop(*pbRed, ry + 120);
+
+        // Orange
+        auto pbOrange = make<ProgressBar>(60.0f);
+        pbOrange->setpreferredWidth(300.0f);
+        pbOrange->setbarHeight(6.0f);
+        pbOrange->setcornerRadius(3.0f);
+        pbOrange->setfillColor(c(230, 160, 50));
+        page->addChild(pbOrange);
+        Canvas::setLeft(*pbOrange, rx);
+        Canvas::setTop(*pbOrange, ry + 140);
+
+        // Cyan
+        auto pbCyan = make<ProgressBar>(45.0f);
+        pbCyan->setpreferredWidth(300.0f);
+        pbCyan->setbarHeight(6.0f);
+        pbCyan->setcornerRadius(3.0f);
+        pbCyan->setfillColor(c(60, 200, 220));
+        page->addChild(pbCyan);
+        Canvas::setLeft(*pbCyan, rx);
+        Canvas::setTop(*pbCyan, ry + 160);
+
+        tabControl->addTab("ProgressBar", page);
     }
 
     _context->setRoot(root);

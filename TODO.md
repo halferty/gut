@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 45 done, 10 partial, 9 missing** out of 63 core features.
+**Score: 46 done, 10 partial, 9 missing** out of 63 core features.
 
 ---
 
@@ -79,7 +79,7 @@
 - [x] Toggle / Switch
 - [x] Slider — horizontal, value/min/max/step, mouse drag (captureMouse), keyboard arrows, show value label
 - [x] DropDown (selection menu, scroll, auto up/down direction)
-- [ ] ProgressBar
+- [x] ProgressBar — determinate (0–100%), indeterminate pulse, % in bar, label below, themed colours
 - [ ] Tooltip
 - [ ] ContextMenu
 - [x] TabControl
