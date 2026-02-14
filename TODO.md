@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 56 done, 10 partial, 1 missing** out of 63 core features.
+**Score: 60 done, 10 partial, 1 missing** out of 67 core features.
 
 ---
 
@@ -16,6 +16,10 @@
 - [x] DockPanel — dock children to edges
 - [x] ViewBox — scale-to-fit container
 - [x] Anchor layout — left+right pins = auto-stretch on resize
+- [x] UniformGrid — all cells equal size, automatic row/column count
+- [x] FlexPanel — CSS Flexbox-style layout with grow/shrink/basis, justify, align
+- [x] RelativePanel — position elements relative to each other or panel edges
+- [x] RadialPanel — arrange children in a circle or arc
 
 ## Rendering
 

@@ -4485,6 +4485,217 @@ protected:
 } // namespace gut
 
 
+// --- gut/elements/UniformGrid.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief Grid where every cell has the same size.
+ *
+ * Set `columns` (or `rows`) and the panel computes the other dimension
+ * automatically from the child count.  All cells are sized equally.
+ */
+class GUT_API UniformGrid : public Panel {
+    GUT_OBJECT(UniformGrid, Panel)
+
+public:
+    UniformGrid() = default;
+    ~UniformGrid() override = default;
+
+    /// Number of columns (0 = auto-compute from rows + child count).
+    GUT_PROPERTY(i32, columns, 0)
+    /// Number of rows (0 = auto-compute from columns + child count).
+    GUT_PROPERTY(i32, rows, 0)
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
+
+private:
+    void computeGrid(i32& outCols, i32& outRows) const;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/FlexPanel.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief Justify-content modes for FlexPanel.
+ */
+enum class FlexJustify : u8 {
+    Start,          ///< Pack children to the start
+    End,            ///< Pack children to the end
+    Center,         ///< Center children
+    SpaceBetween,   ///< Equal space between children
+    SpaceAround,    ///< Equal space around children
+    SpaceEvenly     ///< Equal space between and at edges
+};
+
+/**
+ * @brief Cross-axis alignment for FlexPanel.
+ */
+enum class FlexAlign : u8 {
+    Start,          ///< Align to cross-axis start
+    End,            ///< Align to cross-axis end
+    Center,         ///< Center on cross-axis
+    Stretch         ///< Stretch to fill cross-axis
+};
+
+/**
+ * @brief CSS Flexbox-style layout panel.
+ *
+ * Children flow along the main axis (horizontal or vertical).
+ * Each child can have attached flex-grow / flex-shrink / flex-basis
+ * to control how remaining space is distributed or overflows handled.
+ */
+class GUT_API FlexPanel : public Panel {
+    GUT_OBJECT(FlexPanel, Panel)
+
+public:
+    FlexPanel() = default;
+    explicit FlexPanel(Orientation orientation);
+    ~FlexPanel() override = default;
+
+    GUT_PROPERTY(Orientation, orientation, Orientation::Horizontal)
+    GUT_PROPERTY(f32, spacing, 0.0f)
+    GUT_PROPERTY(FlexJustify, justifyContent, FlexJustify::Start)
+    GUT_PROPERTY(FlexAlign, alignItems, FlexAlign::Stretch)
+
+    // Attached properties per child
+    static void setFlexGrow(Element& element, f32 value);
+    static f32  getFlexGrow(const Element& element);
+    static void setFlexShrink(Element& element, f32 value);
+    static f32  getFlexShrink(const Element& element);
+    static void setFlexBasis(Element& element, f32 value);  ///< NAN = use natural size
+    static f32  getFlexBasis(const Element& element);
+    static void setAlignSelf(Element& element, FlexAlign value);
+    static FlexAlign getAlignSelf(const Element& element); ///< returns FlexAlign::Stretch for "inherit"
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/RelativePanel.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief UWP-style RelativePanel that positions children relative to each
+ *        other or to the panel edges.
+ *
+ * Children reference siblings by id (Element::id()).  Attached properties
+ * such as `RightOf`, `Below`, `AlignTopWith`, `AlignHorizontalCenterWith`, etc.
+ * define spatial relationships.
+ */
+class GUT_API RelativePanel : public Panel {
+    GUT_OBJECT(RelativePanel, Panel)
+
+public:
+    RelativePanel() = default;
+    ~RelativePanel() override = default;
+
+    // --- Positional: place element adjacent to a named sibling ---
+    static void setLeftOf(Element& el, const String& siblingName);
+    static String getLeftOf(const Element& el);
+
+    static void setRightOf(Element& el, const String& siblingName);
+    static String getRightOf(const Element& el);
+
+    static void setAbove(Element& el, const String& siblingName);
+    static String getAbove(const Element& el);
+
+    static void setBelow(Element& el, const String& siblingName);
+    static String getBelow(const Element& el);
+
+    // --- Alignment: align edge with a sibling's edge ---
+    static void setAlignLeftWith(Element& el, const String& siblingName);
+    static String getAlignLeftWith(const Element& el);
+
+    static void setAlignTopWith(Element& el, const String& siblingName);
+    static String getAlignTopWith(const Element& el);
+
+    static void setAlignRightWith(Element& el, const String& siblingName);
+    static String getAlignRightWith(const Element& el);
+
+    static void setAlignBottomWith(Element& el, const String& siblingName);
+    static String getAlignBottomWith(const Element& el);
+
+    // --- Panel-edge alignment ---
+    static void setAlignLeftWithPanel(Element& el, bool value);
+    static bool getAlignLeftWithPanel(const Element& el);
+
+    static void setAlignTopWithPanel(Element& el, bool value);
+    static bool getAlignTopWithPanel(const Element& el);
+
+    static void setAlignRightWithPanel(Element& el, bool value);
+    static bool getAlignRightWithPanel(const Element& el);
+
+    static void setAlignBottomWithPanel(Element& el, bool value);
+    static bool getAlignBottomWithPanel(const Element& el);
+
+    static void setAlignHorizontalCenterWithPanel(Element& el, bool value);
+    static bool getAlignHorizontalCenterWithPanel(const Element& el);
+
+    static void setAlignVerticalCenterWithPanel(Element& el, bool value);
+    static bool getAlignVerticalCenterWithPanel(const Element& el);
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
+
+private:
+    Element* findSibling(const String& name) const;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/RadialPanel.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief Arranges children in a circle or arc.
+ *
+ * Children are evenly spaced around a circle centred in the panel.
+ * `startAngle` and `endAngle` (degrees) control the arc range.
+ * `radius` overrides auto-radius from panel size.
+ */
+class GUT_API RadialPanel : public Panel {
+    GUT_OBJECT(RadialPanel, Panel)
+
+public:
+    RadialPanel() = default;
+    ~RadialPanel() override = default;
+
+    GUT_PROPERTY(f32, startAngle, 0.0f)      ///< degrees, 0 = top (12 o'clock)
+    GUT_PROPERTY(f32, endAngle, 360.0f)      ///< degrees, 360 = full circle
+    GUT_PROPERTY(f32, radius, 0.0f)          ///< 0 = auto (half of min dimension)
+    GUT_PROPERTY(bool, rotateItems, false)   ///< rotate children to face outward
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/Text.h ---
 
 
@@ -16679,6 +16890,455 @@ Size2f AnchorPanel::arrangeOverride(Size2f finalSize) {
         }
 
         child->arrange({x, y, w, h});
+    }
+
+    return finalSize;
+}
+
+} // namespace gut
+
+
+// --- elements/UniformGrid.cpp ---
+
+namespace gut {
+
+void UniformGrid::computeGrid(i32& outCols, i32& outRows) const {
+    i32 count = static_cast<i32>(m_children.size());
+    i32 c = columns();
+    i32 r = rows();
+
+    if (c > 0 && r > 0) {
+        outCols = c;
+        outRows = r;
+    } else if (c > 0) {
+        outCols = c;
+        outRows = (count + c - 1) / c;
+    } else if (r > 0) {
+        outRows = r;
+        outCols = (count + r - 1) / r;
+    } else {
+        // Auto: square-ish grid
+        outCols = std::max(1, (i32)std::ceil(std::sqrt((f32)count)));
+        outRows = (count + outCols - 1) / outCols;
+    }
+    if (outCols < 1) outCols = 1;
+    if (outRows < 1) outRows = 1;
+}
+
+Size2f UniformGrid::measureOverride(Size2f availableSize) {
+    i32 cols, rws;
+    computeGrid(cols, rws);
+
+    // Measure every child to find the largest cell
+    f32 maxW = 0, maxH = 0;
+    Size2f cellAvail = { availableSize.width / cols, availableSize.height / rws };
+    for (auto& child : m_children) {
+        child->measure(cellAvail);
+        Size2f ds = child->desiredSize();
+        maxW = std::max(maxW, ds.width);
+        maxH = std::max(maxH, ds.height);
+    }
+    return { maxW * cols, maxH * rws };
+}
+
+Size2f UniformGrid::arrangeOverride(Size2f finalSize) {
+    i32 cols, rws;
+    computeGrid(cols, rws);
+
+    f32 cellW = finalSize.width  / cols;
+    f32 cellH = finalSize.height / rws;
+
+    for (usize i = 0; i < m_children.size(); ++i) {
+        i32 col = static_cast<i32>(i) % cols;
+        i32 row = static_cast<i32>(i) / cols;
+        m_children[i]->arrange({ col * cellW, row * cellH, cellW, cellH });
+    }
+    return finalSize;
+}
+
+} // namespace gut
+
+
+// --- elements/FlexPanel.cpp ---
+
+namespace gut {
+
+FlexPanel::FlexPanel(Orientation orient) {
+    setorientation(orient);
+}
+
+void FlexPanel::setFlexGrow(Element& el, f32 v)   { el.setAttachedProperty("Flex.Grow", v); }
+f32  FlexPanel::getFlexGrow(const Element& el)    { return el.getAttachedProperty<f32>("Flex.Grow", 0.0f); }
+void FlexPanel::setFlexShrink(Element& el, f32 v) { el.setAttachedProperty("Flex.Shrink", v); }
+f32  FlexPanel::getFlexShrink(const Element& el)  { return el.getAttachedProperty<f32>("Flex.Shrink", 1.0f); }
+void FlexPanel::setFlexBasis(Element& el, f32 v)  { el.setAttachedProperty("Flex.Basis", v); }
+f32  FlexPanel::getFlexBasis(const Element& el)   { return el.getAttachedProperty<f32>("Flex.Basis", NAN); }
+
+void FlexPanel::setAlignSelf(Element& el, FlexAlign v) {
+    el.setAttachedProperty("Flex.AlignSelf", static_cast<u8>(v));
+}
+FlexAlign FlexPanel::getAlignSelf(const Element& el) {
+    // 255 = sentinel for "inherit from alignItems"
+    u8 raw = el.getAttachedProperty<u8>("Flex.AlignSelf", 255);
+    return raw == 255 ? FlexAlign::Stretch : static_cast<FlexAlign>(raw);
+}
+
+Size2f FlexPanel::measureOverride(Size2f availableSize) {
+    const bool horiz = orientation() == Orientation::Horizontal;
+    const f32 gap = spacing();
+    const usize n = m_children.size();
+
+    f32 totalMain = 0;
+    f32 maxCross  = 0;
+
+    for (usize i = 0; i < n; ++i) {
+        auto& child = m_children[i];
+        child->measure(availableSize);
+        Size2f ds = child->desiredSize();
+
+        f32 basis = getFlexBasis(*child);
+        f32 mainSize = std::isnan(basis) ? (horiz ? ds.width : ds.height) : basis;
+        f32 crossSize = horiz ? ds.height : ds.width;
+
+        totalMain += mainSize;
+        if (i > 0) totalMain += gap;
+        maxCross = std::max(maxCross, crossSize);
+    }
+
+    return horiz ? Size2f{totalMain, maxCross} : Size2f{maxCross, totalMain};
+}
+
+Size2f FlexPanel::arrangeOverride(Size2f finalSize) {
+    const bool horiz = orientation() == Orientation::Horizontal;
+    const f32 gap = spacing();
+    const usize n = m_children.size();
+    if (n == 0) return finalSize;
+
+    const f32 mainExtent = horiz ? finalSize.width : finalSize.height;
+    const f32 crossExtent = horiz ? finalSize.height : finalSize.width;
+
+    // Collect natural main sizes via basis or desired
+    struct Item {
+        f32 base;    // basis or natural
+        f32 grow;
+        f32 shrink;
+        f32 final_;  // computed main size
+        FlexAlign align;
+    };
+    std::vector<Item> items(n);
+    f32 totalBase = 0;
+    f32 totalGrow = 0;
+    f32 totalShrink = 0;
+
+    for (usize i = 0; i < n; ++i) {
+        auto& child = m_children[i];
+        Size2f ds = child->desiredSize();
+        f32 basis = getFlexBasis(*child);
+        f32 natural = horiz ? ds.width : ds.height;
+        items[i].base   = std::isnan(basis) ? natural : basis;
+        items[i].grow   = getFlexGrow(*child);
+        items[i].shrink = getFlexShrink(*child);
+        // Check for explicit alignSelf
+        u8 raw = child->getAttachedProperty<u8>("Flex.AlignSelf", 255);
+        items[i].align = (raw == 255) ? alignItems() : static_cast<FlexAlign>(raw);
+        totalBase += items[i].base;
+        totalGrow += items[i].grow;
+        totalShrink += items[i].shrink;
+    }
+
+    f32 totalGaps = gap * (f32)(n - 1);
+    f32 freeSpace = mainExtent - totalBase - totalGaps;
+
+    // Distribute free space
+    for (usize i = 0; i < n; ++i) {
+        items[i].final_ = items[i].base;
+        if (freeSpace > 0 && totalGrow > 0) {
+            items[i].final_ += freeSpace * (items[i].grow / totalGrow);
+        } else if (freeSpace < 0 && totalShrink > 0) {
+            items[i].final_ += freeSpace * (items[i].shrink / totalShrink);
+        }
+        items[i].final_ = std::max(0.0f, items[i].final_);
+    }
+
+    // Compute total used for justify
+    f32 totalUsed = totalGaps;
+    for (auto& it : items) totalUsed += it.final_;
+    f32 remaining = mainExtent - totalUsed;
+
+    // Justify offsets
+    f32 startOffset = 0;
+    f32 extraGap = 0;
+    switch (justifyContent()) {
+        case FlexJustify::Start:        break;
+        case FlexJustify::End:          startOffset = remaining; break;
+        case FlexJustify::Center:       startOffset = remaining * 0.5f; break;
+        case FlexJustify::SpaceBetween:
+            extraGap = (n > 1) ? remaining / (f32)(n - 1) : 0;
+            break;
+        case FlexJustify::SpaceAround:
+            extraGap = remaining / (f32)n;
+            startOffset = extraGap * 0.5f;
+            break;
+        case FlexJustify::SpaceEvenly:
+            extraGap = remaining / (f32)(n + 1);
+            startOffset = extraGap;
+            break;
+    }
+
+    f32 mainPos = startOffset;
+    for (usize i = 0; i < n; ++i) {
+        auto& child = m_children[i];
+        f32 childMain  = items[i].final_;
+        f32 childCross = crossExtent;
+        f32 crossPos   = 0;
+
+        FlexAlign align = items[i].align;
+        if (align != FlexAlign::Stretch) {
+            Size2f ds = child->desiredSize();
+            f32 naturalCross = horiz ? ds.height : ds.width;
+            childCross = naturalCross;
+            switch (align) {
+                case FlexAlign::Start:   crossPos = 0; break;
+                case FlexAlign::End:     crossPos = crossExtent - naturalCross; break;
+                case FlexAlign::Center:  crossPos = (crossExtent - naturalCross) * 0.5f; break;
+                default: break;
+            }
+        }
+
+        Rectf rect;
+        if (horiz) {
+            rect = {mainPos, crossPos, childMain, childCross};
+        } else {
+            rect = {crossPos, mainPos, childCross, childMain};
+        }
+        child->arrange(rect);
+        mainPos += childMain + gap + extraGap;
+    }
+
+    return finalSize;
+}
+
+} // namespace gut
+
+
+// --- elements/RelativePanel.cpp ---
+
+namespace gut {
+
+// --- Attached property helpers ---
+
+void RelativePanel::setLeftOf(Element& el, const String& s)    { el.setAttachedProperty("RP.LeftOf", s); }
+String RelativePanel::getLeftOf(const Element& el)             { return el.getAttachedProperty<String>("RP.LeftOf", String{}); }
+void RelativePanel::setRightOf(Element& el, const String& s)   { el.setAttachedProperty("RP.RightOf", s); }
+String RelativePanel::getRightOf(const Element& el)            { return el.getAttachedProperty<String>("RP.RightOf", String{}); }
+void RelativePanel::setAbove(Element& el, const String& s)     { el.setAttachedProperty("RP.Above", s); }
+String RelativePanel::getAbove(const Element& el)              { return el.getAttachedProperty<String>("RP.Above", String{}); }
+void RelativePanel::setBelow(Element& el, const String& s)     { el.setAttachedProperty("RP.Below", s); }
+String RelativePanel::getBelow(const Element& el)              { return el.getAttachedProperty<String>("RP.Below", String{}); }
+
+void RelativePanel::setAlignLeftWith(Element& el, const String& s)   { el.setAttachedProperty("RP.AlignLeftWith", s); }
+String RelativePanel::getAlignLeftWith(const Element& el)            { return el.getAttachedProperty<String>("RP.AlignLeftWith", String{}); }
+void RelativePanel::setAlignTopWith(Element& el, const String& s)    { el.setAttachedProperty("RP.AlignTopWith", s); }
+String RelativePanel::getAlignTopWith(const Element& el)             { return el.getAttachedProperty<String>("RP.AlignTopWith", String{}); }
+void RelativePanel::setAlignRightWith(Element& el, const String& s)  { el.setAttachedProperty("RP.AlignRightWith", s); }
+String RelativePanel::getAlignRightWith(const Element& el)           { return el.getAttachedProperty<String>("RP.AlignRightWith", String{}); }
+void RelativePanel::setAlignBottomWith(Element& el, const String& s) { el.setAttachedProperty("RP.AlignBottomWith", s); }
+String RelativePanel::getAlignBottomWith(const Element& el)          { return el.getAttachedProperty<String>("RP.AlignBottomWith", String{}); }
+
+void RelativePanel::setAlignLeftWithPanel(Element& el, bool v)              { el.setAttachedProperty("RP.AlignLeftPanel", v); }
+bool RelativePanel::getAlignLeftWithPanel(const Element& el)                { return el.getAttachedProperty<bool>("RP.AlignLeftPanel", false); }
+void RelativePanel::setAlignTopWithPanel(Element& el, bool v)               { el.setAttachedProperty("RP.AlignTopPanel", v); }
+bool RelativePanel::getAlignTopWithPanel(const Element& el)                 { return el.getAttachedProperty<bool>("RP.AlignTopPanel", false); }
+void RelativePanel::setAlignRightWithPanel(Element& el, bool v)             { el.setAttachedProperty("RP.AlignRightPanel", v); }
+bool RelativePanel::getAlignRightWithPanel(const Element& el)               { return el.getAttachedProperty<bool>("RP.AlignRightPanel", false); }
+void RelativePanel::setAlignBottomWithPanel(Element& el, bool v)            { el.setAttachedProperty("RP.AlignBottomPanel", v); }
+bool RelativePanel::getAlignBottomWithPanel(const Element& el)              { return el.getAttachedProperty<bool>("RP.AlignBottomPanel", false); }
+void RelativePanel::setAlignHorizontalCenterWithPanel(Element& el, bool v)  { el.setAttachedProperty("RP.AlignHCenterPanel", v); }
+bool RelativePanel::getAlignHorizontalCenterWithPanel(const Element& el)    { return el.getAttachedProperty<bool>("RP.AlignHCenterPanel", false); }
+void RelativePanel::setAlignVerticalCenterWithPanel(Element& el, bool v)    { el.setAttachedProperty("RP.AlignVCenterPanel", v); }
+bool RelativePanel::getAlignVerticalCenterWithPanel(const Element& el)      { return el.getAttachedProperty<bool>("RP.AlignVCenterPanel", false); }
+
+Element* RelativePanel::findSibling(const String& name) const {
+    if (name.empty()) return nullptr;
+    for (auto& child : m_children) {
+        if (child->id() == name) return child.get();
+    }
+    return nullptr;
+}
+
+Size2f RelativePanel::measureOverride(Size2f availableSize) {
+    for (auto& child : m_children) {
+        child->measure(availableSize);
+    }
+    return availableSize;
+}
+
+Size2f RelativePanel::arrangeOverride(Size2f finalSize) {
+    const f32 pw = finalSize.width;
+    const f32 ph = finalSize.height;
+
+    // Build a name->arranged-rect map.  We do multiple passes to resolve
+    // dependencies.  In the worst case (chain of N), N passes suffice.
+    struct Slot {
+        Element* el;
+        Rectf rect;
+        bool resolved;
+    };
+    std::vector<Slot> slots(m_children.size());
+    for (usize i = 0; i < m_children.size(); ++i) {
+        slots[i].el = m_children[i].get();
+        slots[i].resolved = false;
+    }
+
+    auto findRect = [&](const String& nm) -> const Rectf* {
+        for (auto& s : slots) {
+            if (s.resolved && s.el->id() == nm) return &s.rect;
+        }
+        return nullptr;
+    };
+
+    usize maxPasses = m_children.size() + 1;
+    for (usize pass = 0; pass < maxPasses; ++pass) {
+        bool progress = false;
+        for (auto& slot : slots) {
+            if (slot.resolved) continue;
+            Element& el = *slot.el;
+            Size2f ds = el.desiredSize();
+
+            // Check dependencies
+            auto needSibling = [&](const String& n) -> bool {
+                if (n.empty()) return false;
+                return findRect(n) == nullptr;
+            };
+            bool blocked = false;
+            auto checkBlock = [&](const String& n) { if (needSibling(n)) blocked = true; };
+            checkBlock(getRightOf(el));
+            checkBlock(getLeftOf(el));
+            checkBlock(getBelow(el));
+            checkBlock(getAbove(el));
+            checkBlock(getAlignLeftWith(el));
+            checkBlock(getAlignTopWith(el));
+            checkBlock(getAlignRightWith(el));
+            checkBlock(getAlignBottomWith(el));
+            if (blocked) continue;
+
+            f32 x = 0, y = 0, w = ds.width, h = ds.height;
+
+            // Positional
+            auto rightOfName = getRightOf(el);
+            auto leftOfName  = getLeftOf(el);
+            auto belowName   = getBelow(el);
+            auto aboveName   = getAbove(el);
+
+            if (!rightOfName.empty()) {
+                if (auto* r = findRect(rightOfName)) x = r->x + r->width;
+            }
+            if (!leftOfName.empty()) {
+                if (auto* r = findRect(leftOfName)) x = r->x - w;
+            }
+            if (!belowName.empty()) {
+                if (auto* r = findRect(belowName)) y = r->y + r->height;
+            }
+            if (!aboveName.empty()) {
+                if (auto* r = findRect(aboveName)) y = r->y - h;
+            }
+
+            // Alignment with sibling
+            auto alLeft   = getAlignLeftWith(el);
+            auto alTop    = getAlignTopWith(el);
+            auto alRight  = getAlignRightWith(el);
+            auto alBottom = getAlignBottomWith(el);
+
+            if (!alLeft.empty()) {
+                if (auto* r = findRect(alLeft)) x = r->x;
+            }
+            if (!alTop.empty()) {
+                if (auto* r = findRect(alTop)) y = r->y;
+            }
+            if (!alRight.empty()) {
+                if (auto* r = findRect(alRight)) x = r->x + r->width - w;
+            }
+            if (!alBottom.empty()) {
+                if (auto* r = findRect(alBottom)) y = r->y + r->height - h;
+            }
+
+            // Panel-edge alignment
+            if (getAlignLeftWithPanel(el))   x = 0;
+            if (getAlignTopWithPanel(el))    y = 0;
+            if (getAlignRightWithPanel(el))  x = pw - w;
+            if (getAlignBottomWithPanel(el)) y = ph - h;
+            if (getAlignHorizontalCenterWithPanel(el)) x = (pw - w) * 0.5f;
+            if (getAlignVerticalCenterWithPanel(el))   y = (ph - h) * 0.5f;
+
+            slot.rect = {x, y, w, h};
+            slot.resolved = true;
+            progress = true;
+        }
+        if (!progress) break;  // no more resolvable or all done
+    }
+
+    // Arrange everything (unresolved gets (0,0))
+    for (auto& slot : slots) {
+        if (!slot.resolved) slot.rect = {0, 0, slot.el->desiredSize().width, slot.el->desiredSize().height};
+        slot.el->arrange(slot.rect);
+    }
+
+    return finalSize;
+}
+
+} // namespace gut
+
+
+// --- elements/RadialPanel.cpp ---
+
+namespace gut {
+
+Size2f RadialPanel::measureOverride(Size2f availableSize) {
+    // Measure all children with infinite space
+    for (auto& child : m_children) {
+        child->measure({INFINITY, INFINITY});
+    }
+    return availableSize;
+}
+
+Size2f RadialPanel::arrangeOverride(Size2f finalSize) {
+    const usize n = m_children.size();
+    if (n == 0) return finalSize;
+
+    const f32 cx = finalSize.width  * 0.5f;
+    const f32 cy = finalSize.height * 0.5f;
+
+    f32 r = radius();
+    if (r <= 0) {
+        // Auto radius: half the smallest dimension, minus room for children
+        f32 maxChildR = 0;
+        for (auto& child : m_children) {
+            Size2f ds = child->desiredSize();
+            maxChildR = std::max(maxChildR, std::max(ds.width, ds.height) * 0.5f);
+        }
+        r = std::max(0.0f, std::min(cx, cy) - maxChildR);
+    }
+
+    constexpr f32 DEG2RAD = 3.14159265358979323846f / 180.0f;
+    // Convert angles: 0deg = 12 o'clock (top), clockwise.
+    // In math coords: 12 o'clock = -90deg.
+    f32 startRad = (startAngle() - 90.0f) * DEG2RAD;
+    f32 endRad   = (endAngle()   - 90.0f) * DEG2RAD;
+
+    bool fullCircle = std::abs(endAngle() - startAngle()) >= 360.0f;
+    f32 span = endRad - startRad;
+    f32 step = (n == 1) ? 0.0f : (fullCircle ? span / (f32)n : span / (f32)(n - 1));
+
+    for (usize i = 0; i < n; ++i) {
+        f32 angle = startRad + step * (f32)i;
+        f32 px = cx + r * std::cos(angle);
+        f32 py = cy + r * std::sin(angle);
+
+        Size2f ds = m_children[i]->desiredSize();
+        // Center the child on the computed position
+        f32 lx = px - ds.width  * 0.5f;
+        f32 ly = py - ds.height * 0.5f;
+        m_children[i]->arrange({lx, ly, ds.width, ds.height});
     }
 
     return finalSize;

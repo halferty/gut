@@ -800,6 +800,244 @@ static void BuildUI() {
         tabs->addTab("Layouts", page);
     }
 
+    // =================================================================
+    // TAB 5 — Layouts 2 (UniformGrid, FlexPanel, RelativePanel, RadialPanel)
+    // =================================================================
+    {
+        auto page = makeRef<StackPanel>(Orientation::Horizontal);
+        page->setmargin(Thickness{24, 24, 24, 24});
+        page->setspacing(20.0f);
+
+        // --- Column 1: UniformGrid + FlexPanel ---
+        auto col1 = makeRef<StackPanel>(Orientation::Vertical);
+        col1->setspacing(20.0f);
+
+        { // UniformGrid card
+            auto card = makeCard(340.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("UniformGrid"));
+            inner->addChild(makeLabel("All cells are equal size (3 columns)"));
+
+            auto grid = makeRef<UniformGrid>();
+            grid->setcolumns(3);
+            grid->setwidth(300.0f);
+            grid->setheight(200.0f);
+            grid->setmargin(Thickness{0, 10, 0, 0});
+
+            Color cellColors[] = {
+                c(80,140,220), c(200,100,60), c(60,180,100),
+                c(220,160,40), c(150,80,200), c(50,160,180),
+                c(200,60,100), c(100,180,60), c(180,120,60)
+            };
+            for (int i = 0; i < 9; ++i) {
+                auto cell = makeRef<Panel>();
+                cell->setbackground(cellColors[i]);
+                cell->setmargin(Thickness{2, 2, 2, 2});
+                cell->setcornerRadius(4.0f);
+                auto lbl = makeRef<Text>();
+                lbl->settext(std::to_string(i + 1));
+                lbl->setfontSize(16.0f);
+                lbl->setforeground(c(255,255,255));
+                lbl->setmargin(Thickness{8, 8, 0, 0});
+                cell->addChild(lbl);
+                grid->addChild(cell);
+            }
+            inner->addChild(grid);
+            card->addChild(inner);
+            col1->addChild(card);
+        }
+        { // FlexPanel card
+            auto card = makeCard(340.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("FlexPanel"));
+            inner->addChild(makeLabel("CSS Flexbox: grow=1, spaceEvenly"));
+
+            auto flex = makeRef<FlexPanel>(Orientation::Horizontal);
+            flex->setwidth(300.0f);
+            flex->setheight(60.0f);
+            flex->setspacing(6.0f);
+            flex->setjustifyContent(FlexJustify::SpaceEvenly);
+            flex->setalignItems(FlexAlign::Center);
+            flex->setmargin(Thickness{0, 10, 0, 0});
+            flex->setbackground(c(24, 26, 36));
+            flex->setcornerRadius(4.0f);
+
+            Color flexColors[] = {c(80,140,220), c(200,100,60), c(60,180,100)};
+            const char* flexLabels[] = {"A", "B", "C"};
+            for (int i = 0; i < 3; ++i) {
+                auto box = makeRef<Panel>();
+                box->setwidth(60.0f);
+                box->setheight(36.0f);
+                box->setbackground(flexColors[i]);
+                box->setcornerRadius(6.0f);
+                FlexPanel::setFlexGrow(*box, 1.0f);
+                auto lbl = makeRef<Text>();
+                lbl->settext(flexLabels[i]);
+                lbl->setfontSize(14.0f);
+                lbl->setforeground(c(255,255,255));
+                lbl->setmargin(Thickness{8, 8, 0, 0});
+                box->addChild(lbl);
+                flex->addChild(box);
+            }
+            inner->addChild(flex);
+
+            // Second row: vertical flex with shrink
+            auto flex2 = makeRef<FlexPanel>(Orientation::Vertical);
+            flex2->setwidth(300.0f);
+            flex2->setheight(100.0f);
+            flex2->setspacing(4.0f);
+            flex2->setjustifyContent(FlexJustify::SpaceBetween);
+            flex2->setalignItems(FlexAlign::Stretch);
+            flex2->setmargin(Thickness{0, 8, 0, 0});
+            flex2->setbackground(c(24, 26, 36));
+            flex2->setcornerRadius(4.0f);
+
+            for (int i = 0; i < 4; ++i) {
+                auto row = makeRef<Panel>();
+                row->setheight(20.0f);
+                row->setbackground(c(50 + i * 30, 80, 180 - i * 20));
+                row->setcornerRadius(3.0f);
+                auto t = makeRef<Text>();
+                t->settext(String("Row ") + std::to_string(i + 1).c_str());
+                t->setfontSize(11.0f);
+                t->setforeground(c(255,255,255));
+                t->setmargin(Thickness{8, 2, 0, 0});
+                row->addChild(t);
+                flex2->addChild(row);
+            }
+            inner->addChild(flex2);
+
+            card->addChild(inner);
+            col1->addChild(card);
+        }
+        page->addChild(col1);
+
+        // --- Column 2: RelativePanel + RadialPanel ---
+        auto col2 = makeRef<StackPanel>(Orientation::Vertical);
+        col2->setspacing(20.0f);
+
+        { // RelativePanel card
+            auto card = makeCard(340.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("RelativePanel"));
+            inner->addChild(makeLabel("Position children relative to each other"));
+
+            auto rel = makeRef<RelativePanel>();
+            rel->setwidth(300.0f);
+            rel->setheight(150.0f);
+            rel->setbackground(c(24, 26, 36));
+            rel->setcornerRadius(4.0f);
+            rel->setborderColor(c(45, 50, 70));
+            rel->setborderWidth(1.0f);
+            rel->setmargin(Thickness{0, 10, 0, 0});
+
+            // Header box: aligned top-left with panel
+            auto header = makeRef<Panel>();
+            header->setid("header");
+            header->setwidth(120.0f); header->setheight(30.0f);
+            header->setbackground(c(80,140,220));
+            header->setcornerRadius(4.0f);
+            RelativePanel::setAlignLeftWithPanel(*header, true);
+            RelativePanel::setAlignTopWithPanel(*header, true);
+            auto ht = makeRef<Text>();
+            ht->settext("Header"); ht->setfontSize(12.0f);
+            ht->setforeground(c(255,255,255));
+            ht->setmargin(Thickness{8, 6, 0, 0});
+            header->addChild(ht);
+            rel->addChild(header);
+
+            // Sidebar: below header, panel-left
+            auto sidebar = makeRef<Panel>();
+            sidebar->setid("sidebar");
+            sidebar->setwidth(70.0f); sidebar->setheight(80.0f);
+            sidebar->setbackground(c(60,180,100));
+            sidebar->setcornerRadius(4.0f);
+            RelativePanel::setBelow(*sidebar, "header");
+            RelativePanel::setAlignLeftWithPanel(*sidebar, true);
+            auto st = makeRef<Text>();
+            st->settext("Side"); st->setfontSize(11.0f);
+            st->setforeground(c(255,255,255));
+            st->setmargin(Thickness{8, 6, 0, 0});
+            sidebar->addChild(st);
+            rel->addChild(sidebar);
+
+            // Content: right of sidebar, below header
+            auto content = makeRef<Panel>();
+            content->setid("content");
+            content->setwidth(140.0f); content->setheight(80.0f);
+            content->setbackground(c(200,100,60));
+            content->setcornerRadius(4.0f);
+            RelativePanel::setRightOf(*content, "sidebar");
+            RelativePanel::setBelow(*content, "header");
+            auto ct = makeRef<Text>();
+            ct->settext("Content"); ct->setfontSize(11.0f);
+            ct->setforeground(c(255,255,255));
+            ct->setmargin(Thickness{8, 6, 0, 0});
+            content->addChild(ct);
+            rel->addChild(content);
+
+            // Footer: bottom-right of panel
+            auto footer = makeRef<Panel>();
+            footer->setid("footer");
+            footer->setwidth(100.0f); footer->setheight(24.0f);
+            footer->setbackground(c(150,80,200));
+            footer->setcornerRadius(4.0f);
+            RelativePanel::setAlignRightWithPanel(*footer, true);
+            RelativePanel::setAlignBottomWithPanel(*footer, true);
+            auto ft = makeRef<Text>();
+            ft->settext("Footer"); ft->setfontSize(10.0f);
+            ft->setforeground(c(255,255,255));
+            ft->setmargin(Thickness{8, 4, 0, 0});
+            footer->addChild(ft);
+            rel->addChild(footer);
+
+            inner->addChild(rel);
+            card->addChild(inner);
+            col2->addChild(card);
+        }
+        { // RadialPanel card
+            auto card = makeCard(340.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("RadialPanel"));
+            inner->addChild(makeLabel("Arrange children in a circle"));
+
+            auto radial = makeRef<RadialPanel>();
+            radial->setwidth(300.0f);
+            radial->setheight(260.0f);
+            radial->setbackground(c(24, 26, 36));
+            radial->setcornerRadius(4.0f);
+            radial->setborderColor(c(45, 50, 70));
+            radial->setborderWidth(1.0f);
+            radial->setmargin(Thickness{0, 10, 0, 0});
+
+            const char* hours[] = {"12","1","2","3","4","5","6","7","8","9","10","11"};
+            for (int i = 0; i < 12; ++i) {
+                auto dot = makeRef<Panel>();
+                dot->setwidth(32.0f);
+                dot->setheight(32.0f);
+                dot->setbackground(c(50 + i*15, 100, 220 - i*10));
+                dot->setcornerRadius(16.0f);
+                auto t = makeRef<Text>();
+                t->settext(hours[i]);
+                t->setfontSize(11.0f);
+                t->setforeground(c(255,255,255));
+                t->setmargin(Thickness{8, 7, 0, 0});
+                dot->addChild(t);
+                radial->addChild(dot);
+            }
+            inner->addChild(radial);
+            card->addChild(inner);
+            col2->addChild(card);
+        }
+        page->addChild(col2);
+
+        tabs->addTab("Layouts 2", page);
+    }
+
     root->addChild(tabs);
     g_gutCtx->setRoot(root);
 }
