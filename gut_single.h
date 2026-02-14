@@ -1971,6 +1971,24 @@ public:
     void drawImage(const Texture& texture, Rectf srcRect, Rectf destRect);
     void drawImage(const Texture& texture, Rectf srcRect, Rectf destRect, Color tint);
     
+    /**
+     * @brief Draw an image using 9-slice scaling.
+     *
+     * The source image is divided into a 3×3 grid by the border insets.
+     * Corners stay fixed-size, edges stretch in one axis, center stretches
+     * in both axes.  This preserves styled borders at any destination size.
+     *
+     * @param texture   The source texture.
+     * @param borders   Pixel insets {left, top, right, bottom} defining the 9 slices.
+     * @param destRect  Destination rectangle in local coordinates.
+     * @param tint      Color multiplier (default white = no tint).
+     */
+    void drawImageNineSlice(const Texture& texture, Thickness borders,
+                            Rectf destRect, Color tint = Color::white());
+    void drawImageNineSlice(const Texture& texture, Rectf srcRect,
+                            Thickness borders, Rectf destRect,
+                            Color tint = Color::white());
+    
     // -------------------------------------------------------------------------
     // Text
     // -------------------------------------------------------------------------
@@ -3572,6 +3590,15 @@ public:
     /// Get font style
     FontStyle style() const { return m_style; }
     
+    /// Set font family name (overrides auto-detected value)
+    void setFamily(const std::string& family) { m_family = family; }
+    
+    /// Set font weight (overrides auto-detected value)
+    void setWeight(FontWeight weight) { m_weight = weight; }
+    
+    /// Set font style (overrides auto-detected value)
+    void setStyle(FontStyle style) { m_style = style; }
+    
     /// Check if font has a specific glyph
     bool hasGlyph(u32 codepoint) const;
     
@@ -4277,6 +4304,187 @@ protected:
 } // namespace gut
 
 
+// --- gut/elements/WrapPanel.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief Panel that arranges children sequentially, wrapping to new lines when
+ *        the available space is exhausted along the main axis.
+ *
+ * Similar to CSS `flex-wrap: wrap`. Children flow left-to-right (Horizontal)
+ * or top-to-bottom (Vertical), and a new row/column is started when the next
+ * child would exceed the panel width/height.
+ */
+class GUT_API WrapPanel : public Panel {
+    GUT_OBJECT(WrapPanel, Panel)
+
+public:
+    WrapPanel() = default;
+    explicit WrapPanel(Orientation orientation);
+    ~WrapPanel() override = default;
+
+    GUT_PROPERTY(Orientation, orientation, Orientation::Horizontal)
+    GUT_PROPERTY(f32, itemSpacing, 0.0f)   ///< Spacing between items in a line
+    GUT_PROPERTY(f32, lineSpacing, 0.0f)   ///< Spacing between lines
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/DockPanel.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief Dock direction for DockPanel children.
+ */
+enum class Dock : u8 {
+    Left,
+    Top,
+    Right,
+    Bottom
+};
+
+/**
+ * @brief Panel that docks children to the edges of the available space.
+ *
+ * Each child is docked to a side (Left, Top, Right, Bottom) and the remaining
+ * space shrinks accordingly. By default, the last child fills the remaining
+ * space. Set `lastChildFill(false)` to dock it like the others.
+ */
+class GUT_API DockPanel : public Panel {
+    GUT_OBJECT(DockPanel, Panel)
+
+public:
+    DockPanel() = default;
+    ~DockPanel() override = default;
+
+    GUT_PROPERTY(bool, lastChildFill, true)
+
+    // Attached property — set Dock on a child element
+    static void setDock(Element& element, Dock value);
+    static Dock getDock(const Element& element);
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/ViewBox.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief Stretch mode for ViewBox.
+ */
+enum class ViewBoxStretch : u8 {
+    None,           ///< Child at natural size, no scaling
+    Uniform,        ///< Scale to fit, preserving aspect ratio
+    UniformToFill,  ///< Scale to fill, preserving aspect ratio (may clip)
+    Fill            ///< Stretch to fill exactly (may distort)
+};
+
+/**
+ * @brief Container that scales its single child to fit the available space.
+ *
+ * Measures the child at infinite size, then applies a scale transform so that
+ * the child fits within the ViewBox bounds according to the stretch mode.
+ */
+class GUT_API ViewBox : public Panel {
+    GUT_OBJECT(ViewBox, Panel)
+
+public:
+    ViewBox() = default;
+    ~ViewBox() override = default;
+
+    GUT_PROPERTY(ViewBoxStretch, stretch, ViewBoxStretch::Uniform)
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
+    void renderChildren(RenderContext& ctx) override;
+
+private:
+    f32 m_scaleX = 1.0f;
+    f32 m_scaleY = 1.0f;
+    f32 m_offsetX = 0.0f;
+    f32 m_offsetY = 0.0f;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/AnchorPanel.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief Panel that positions children using anchor constraints relative to
+ *        the panel edges (or a fraction of the panel size).
+ *
+ * Extends Canvas-style absolute positioning with proportional anchors.
+ * Each child can have AnchorLeft/AnchorTop/AnchorRight/AnchorBottom (0..1)
+ * specifying which fraction of the panel edge to anchor to, plus Offset
+ * values (Left/Top/Right/Bottom like Canvas).
+ *
+ * If both left and right offsets are set, the child is stretched horizontally.
+ * If both top and bottom offsets are set, the child is stretched vertically.
+ */
+class GUT_API AnchorPanel : public Panel {
+    GUT_OBJECT(AnchorPanel, Panel)
+
+public:
+    AnchorPanel() = default;
+    ~AnchorPanel() override = default;
+
+    // -------------------------------------------------------------------------
+    // Attached properties — anchor ratios (0..1, fraction of panel size)
+    // -------------------------------------------------------------------------
+    static void setAnchorLeft(Element& element, f32 value);
+    static f32  getAnchorLeft(const Element& element);
+    static void setAnchorTop(Element& element, f32 value);
+    static f32  getAnchorTop(const Element& element);
+    static void setAnchorRight(Element& element, f32 value);
+    static f32  getAnchorRight(const Element& element);
+    static void setAnchorBottom(Element& element, f32 value);
+    static f32  getAnchorBottom(const Element& element);
+
+    // -------------------------------------------------------------------------
+    // Attached properties — offsets from the anchor point (pixels)
+    // -------------------------------------------------------------------------
+    static void setOffsetLeft(Element& element, f32 value);
+    static f32  getOffsetLeft(const Element& element);
+    static void setOffsetTop(Element& element, f32 value);
+    static f32  getOffsetTop(const Element& element);
+    static void setOffsetRight(Element& element, f32 value);
+    static f32  getOffsetRight(const Element& element);
+    static void setOffsetBottom(Element& element, f32 value);
+    static f32  getOffsetBottom(const Element& element);
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    Size2f arrangeOverride(Size2f finalSize) override;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/Text.h ---
 
 
@@ -4311,10 +4519,26 @@ public:
     GUT_PROPERTY(Color, foreground, Color::black())
     GUT_PROPERTY(String, fontFamily, "sans-serif")
     GUT_PROPERTY(f32, fontSize, 14.0f)
+    GUT_PROPERTY(FontWeight, fontWeight, FontWeight::Normal)
+    GUT_PROPERTY(FontStyle, fontStyle, FontStyle::Normal)
     GUT_PROPERTY(bool, bold, false)
     GUT_PROPERTY(bool, italic, false)
     GUT_PROPERTY(bool, underline, false)
     GUT_PROPERTY(bool, strikethrough, false)
+    
+    /// Resolve the effective font weight (fontWeight property, or Bold if bold()==true).
+    FontWeight effectiveFontWeight() const {
+        if (bold() && fontWeight() == FontWeight::Normal)
+            return FontWeight::Bold;
+        return fontWeight();
+    }
+    
+    /// Resolve the effective font style (fontStyle property, or Italic if italic()==true).
+    FontStyle effectiveFontStyle() const {
+        if (italic() && fontStyle() == FontStyle::Normal)
+            return FontStyle::Italic;
+        return fontStyle();
+    }
     
     // -------------------------------------------------------------------------
     // Layout
@@ -5357,10 +5581,17 @@ public:
         None,           // Display at natural size
         Fill,           // Fill the entire area (may distort)
         Uniform,        // Scale to fit, preserving aspect ratio
-        UniformToFill   // Scale to fill, preserving aspect ratio (may clip)
+        UniformToFill,  // Scale to fill, preserving aspect ratio (may clip)
+        NineSlice       // 9-slice scaling — corners fixed, edges stretch
     };
     
     GUT_PROPERTY(Stretch, stretch, Stretch::Uniform)
+    
+    /**
+     * @brief Border insets for NineSlice stretch mode.
+     * Defines the pixel distances from each edge that delimit the 9 slices.
+     */
+    GUT_PROPERTY(Thickness, sliceBorders, Thickness{})
     GUT_PROPERTY(HorizontalAlignment, horizontalImageAlignment, HorizontalAlignment::Center)
     GUT_PROPERTY(VerticalAlignment, verticalImageAlignment, VerticalAlignment::Center)
     GUT_PROPERTY(Color, tint, Color::white())  // Color multiplier
@@ -5859,8 +6090,42 @@ public:
      * @param data Pointer to font file data.
      * @param size Size of font data in bytes.
      * @return Loaded font, or nullptr on failure.
+     *
+     * The font's family, weight and style are auto-detected from the
+     * TrueType/OpenType tables and the font is automatically registered
+     * in the font registry.  Call Font::setFamily / setWeight / setStyle
+     * before loading if you need to override the detected values.
      */
     Ref<Font> loadFont(const u8* data, size_t size);
+    
+    /**
+     * @brief Load a font with explicit family, weight and style metadata.
+     */
+    Ref<Font> loadFont(const u8* data, size_t size,
+                       const std::string& family,
+                       FontWeight weight = FontWeight::Normal,
+                       FontStyle  style  = FontStyle::Normal);
+    
+    /**
+     * @brief Register a previously-loaded font in the font registry.
+     *
+     * The font's family(), weight() and style() are used as the registry key.
+     * If a font with the same key already exists it is replaced.
+     */
+    void registerFont(Ref<Font> font);
+    
+    /**
+     * @brief Find a font by family, weight and style.
+     *
+     * Performs a best-match lookup:
+     *  1. Exact match on (family, weight, style).
+     *  2. Same family, nearest weight, same style.
+     *  3. Same family, any weight/style.
+     *  4. Falls back to defaultFont().
+     */
+    Font* findFont(const std::string& family,
+                   FontWeight weight = FontWeight::Normal,
+                   FontStyle  style  = FontStyle::Normal) const;
     
     /**
      * @brief Set the default font for text rendering.
@@ -5891,6 +6156,25 @@ private:
     Ref<Theme> m_theme;
     Ref<Font> m_defaultFont;
     std::vector<Ref<StyleSheet>> m_styleSheets;
+    
+    // Font registry — maps (family, weight, style) → Font
+    struct FontKey {
+        std::string family;
+        FontWeight weight;
+        FontStyle style;
+        bool operator==(const FontKey& o) const {
+            return family == o.family && weight == o.weight && style == o.style;
+        }
+    };
+    struct FontKeyHash {
+        size_t operator()(const FontKey& k) const {
+            size_t h = std::hash<std::string>{}(k.family);
+            h ^= std::hash<int>{}(static_cast<int>(k.weight)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<int>{}(static_cast<int>(k.style))  + 0x9e3779b9 + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+    std::unordered_map<FontKey, Ref<Font>, FontKeyHash> m_fontRegistry;
     
     Size2f m_size{};
     f64 m_totalTime{0.0};
@@ -12198,6 +12482,52 @@ void RenderContext::drawImage(const Texture& texture, Rectf srcRect, Rectf destR
     addRect(destRect, tint, const_cast<Texture*>(&texture), uvRect);
 }
 
+void RenderContext::drawImageNineSlice(const Texture& texture, Thickness borders,
+                                       Rectf destRect, Color tint) {
+    Rectf srcRect = {0, 0, static_cast<f32>(texture.width()), static_cast<f32>(texture.height())};
+    drawImageNineSlice(texture, srcRect, borders, destRect, tint);
+}
+
+void RenderContext::drawImageNineSlice(const Texture& texture, Rectf srcRect,
+                                       Thickness borders, Rectf destRect,
+                                       Color tint) {
+    f32 texW = static_cast<f32>(texture.width());
+    f32 texH = static_cast<f32>(texture.height());
+    Texture* tex = const_cast<Texture*>(&texture);
+    
+    // Clamp borders so they don't exceed source or dest dimensions
+    f32 bL = std::min(borders.left,   std::min(srcRect.width, destRect.width) / 2);
+    f32 bR = std::min(borders.right,  std::min(srcRect.width, destRect.width) / 2);
+    f32 bT = std::min(borders.top,    std::min(srcRect.height, destRect.height) / 2);
+    f32 bB = std::min(borders.bottom, std::min(srcRect.height, destRect.height) / 2);
+    
+    // Source x/y splits (in pixels)
+    f32 sx[4] = { srcRect.x, srcRect.x + bL, srcRect.x + srcRect.width - bR, srcRect.x + srcRect.width };
+    f32 sy[4] = { srcRect.y, srcRect.y + bT, srcRect.y + srcRect.height - bB, srcRect.y + srcRect.height };
+    
+    // Destination x/y splits
+    f32 dx[4] = { destRect.x, destRect.x + bL, destRect.x + destRect.width - bR, destRect.x + destRect.width };
+    f32 dy[4] = { destRect.y, destRect.y + bT, destRect.y + destRect.height - bB, destRect.y + destRect.height };
+    
+    // Emit 9 quads (3 rows × 3 columns)
+    for (int row = 0; row < 3; ++row) {
+        for (int col = 0; col < 3; ++col) {
+            f32 dw = dx[col + 1] - dx[col];
+            f32 dh = dy[row + 1] - dy[row];
+            if (dw <= 0 || dh <= 0) continue; // degenerate slice, skip
+            
+            Rectf dest = { dx[col], dy[row], dw, dh };
+            Rectf uv = {
+                sx[col]           / texW,
+                sy[row]           / texH,
+                (sx[col + 1] - sx[col]) / texW,
+                (sy[row + 1] - sy[row]) / texH
+            };
+            addRect(dest, tint, tex, uv);
+        }
+    }
+}
+
 Size2f RenderContext::measureText(const TextLayout& layout) {
     return m_backend.measureText(layout);
 }
@@ -14384,9 +14714,69 @@ bool Font::initStbFont() {
     
     m_stbInitialized = true;
     
-    // Try to extract font name (optional)
-    // stb_truetype doesn't have a dedicated name API, so we leave it empty
-    // Users can set family name manually if needed
+    // ---- Extract font family name from the name table ----
+    // Prefer nameID 16 (Typographic/Preferred Family) which gives the pure
+    // family name without weight/style qualifiers (e.g. "Segoe UI" for all
+    // variants).  Fall back to nameID 1 (Font Family) which may include
+    // the style (e.g. "Segoe UI Bold").
+    if (m_family.empty()) {
+        auto extractName = [&](int nameID) -> std::string {
+            int nameLen = 0;
+            // Try platform 3 (Windows), encoding 1 (Unicode BMP), language 0x0409 (English US)
+            const char* nameData = stbtt_GetFontNameString(&info, &nameLen,
+                3, 1, 0x0409, nameID);
+            if (nameData && nameLen > 0) {
+                std::string fam;
+                fam.reserve(nameLen / 2);
+                for (int i = 0; i + 1 < nameLen; i += 2) {
+                    unsigned char hi = static_cast<unsigned char>(nameData[i]);
+                    unsigned char lo = static_cast<unsigned char>(nameData[i + 1]);
+                    char16_t ch = static_cast<char16_t>((hi << 8) | lo);
+                    if (ch < 128) fam.push_back(static_cast<char>(ch));
+                    else          fam.push_back('?');
+                }
+                if (!fam.empty()) return fam;
+            }
+            // Fallback: platform 1 (Macintosh), encoding 0 (Roman), language 0 (English)
+            nameData = stbtt_GetFontNameString(&info, &nameLen, 1, 0, 0, nameID);
+            if (nameData && nameLen > 0)
+                return std::string(nameData, nameLen);
+            return {};
+        };
+
+        // nameID 16 = Typographic Family (preferred)
+        m_family = extractName(16);
+        // nameID 1 = Font Family (fallback)
+        if (m_family.empty())
+            m_family = extractName(1);
+    }
+    
+    // ---- Extract weight from OS/2 table usWeightClass (offset 4) ----
+    if (m_weight == FontWeight::Normal) {
+        stbtt_uint8* data = m_fontData.data();
+        stbtt_uint32 os2 = stbtt__find_table(data, info.fontstart, "OS/2");
+        if (os2) {
+            int wc = static_cast<int>(ttUSHORT(data + os2 + 4)); // usWeightClass
+            // Map usWeightClass to FontWeight enum
+            if      (wc <= 150) m_weight = FontWeight::Thin;
+            else if (wc <= 250) m_weight = FontWeight::ExtraLight;
+            else if (wc <= 350) m_weight = FontWeight::Light;
+            else if (wc <= 450) m_weight = FontWeight::Normal;
+            else if (wc <= 550) m_weight = FontWeight::Medium;
+            else if (wc <= 650) m_weight = FontWeight::SemiBold;
+            else if (wc <= 750) m_weight = FontWeight::Bold;
+            else if (wc <= 850) m_weight = FontWeight::ExtraBold;
+            else                m_weight = FontWeight::Black;
+        }
+    }
+    
+    // ---- Extract style from head table macStyle (offset 44) ----
+    if (m_style == FontStyle::Normal && info.head) {
+        stbtt_uint8* data = m_fontData.data();
+        int macStyle = static_cast<int>(ttUSHORT(data + info.head + 44));
+        if (macStyle & 2) // bit 1 = italic
+            m_style = FontStyle::Italic;
+    }
     
     return true;
 }
@@ -15854,6 +16244,449 @@ Size2f Canvas::arrangeOverride(Size2f finalSize) {
 } // namespace gut
 
 
+// --- elements/WrapPanel.cpp ---
+
+#include <algorithm>
+#include <cmath>
+
+namespace gut {
+
+WrapPanel::WrapPanel(Orientation orient) {
+    setorientation(orient);
+}
+
+Size2f WrapPanel::measureOverride(Size2f availableSize) {
+    const bool isHorizontal = orientation() == Orientation::Horizontal;
+    const f32 iGap = itemSpacing();
+    const f32 lGap = lineSpacing();
+
+    // Available extent along the main axis (the dimension we wrap on)
+    const f32 mainLimit = isHorizontal ? availableSize.width : availableSize.height;
+
+    f32 lineMain  = 0;   // accumulated main-axis for current line
+    f32 lineCross = 0;   // max cross-axis in current line
+    f32 totalCross = 0;  // accumulated cross-axis across all lines
+    f32 maxMain    = 0;  // widest line
+    bool firstInLine = true;
+    bool firstLine   = true;
+
+    for (auto& child : m_children) {
+        child->measure(availableSize);
+        Size2f cs = child->desiredSize();
+
+        f32 childMain  = isHorizontal ? cs.width  : cs.height;
+        f32 childCross = isHorizontal ? cs.height : cs.width;
+
+        // Should this child go on a new line?
+        f32 neededMain = firstInLine ? childMain : (iGap + childMain);
+        if (!firstInLine && (lineMain + neededMain) > mainLimit) {
+            // Finish current line
+            maxMain = std::max(maxMain, lineMain);
+            totalCross += (firstLine ? 0 : lGap) + lineCross;
+            firstLine = false;
+            lineMain  = childMain;
+            lineCross = childCross;
+            firstInLine = false;
+        } else {
+            lineMain += (firstInLine ? 0 : iGap) + childMain;
+            lineCross = std::max(lineCross, childCross);
+            firstInLine = false;
+        }
+    }
+
+    // Last line
+    maxMain = std::max(maxMain, lineMain);
+    totalCross += (firstLine ? 0 : lGap) + lineCross;
+
+    if (isHorizontal) return {maxMain, totalCross};
+    else              return {totalCross, maxMain};
+}
+
+Size2f WrapPanel::arrangeOverride(Size2f finalSize) {
+    const bool isHorizontal = orientation() == Orientation::Horizontal;
+    const f32 iGap = itemSpacing();
+    const f32 lGap = lineSpacing();
+    const f32 mainLimit = isHorizontal ? finalSize.width : finalSize.height;
+
+    // --- First pass: bucket children into lines ---
+    struct Line {
+        usize start = 0;
+        usize count = 0;
+        f32 mainUsed = 0;
+        f32 crossSize = 0;
+    };
+    std::vector<Line> lines;
+    {
+        Line cur;
+        cur.start = 0;
+        bool firstInLine = true;
+        for (usize i = 0; i < m_children.size(); ++i) {
+            Size2f cs = m_children[i]->desiredSize();
+            f32 childMain  = isHorizontal ? cs.width  : cs.height;
+            f32 childCross = isHorizontal ? cs.height : cs.width;
+            f32 needed = firstInLine ? childMain : (iGap + childMain);
+
+            if (!firstInLine && (cur.mainUsed + needed) > mainLimit) {
+                lines.push_back(cur);
+                cur = {};
+                cur.start = i;
+                cur.mainUsed  = childMain;
+                cur.crossSize = childCross;
+                cur.count     = 1;
+                firstInLine   = false;
+            } else {
+                cur.mainUsed += (firstInLine ? 0 : iGap) + childMain;
+                cur.crossSize = std::max(cur.crossSize, childCross);
+                cur.count++;
+                firstInLine = false;
+            }
+        }
+        if (cur.count > 0) lines.push_back(cur);
+    }
+
+    // --- Second pass: arrange each line ---
+    f32 crossOffset = 0;
+    for (auto& line : lines) {
+        f32 mainOffset = 0;
+        for (usize i = line.start; i < line.start + line.count; ++i) {
+            Size2f cs = m_children[i]->desiredSize();
+            f32 childMain  = isHorizontal ? cs.width  : cs.height;
+
+            Rectf rect;
+            if (isHorizontal) {
+                rect = {mainOffset, crossOffset, childMain, line.crossSize};
+            } else {
+                rect = {crossOffset, mainOffset, line.crossSize, childMain};
+            }
+            m_children[i]->arrange(rect);
+            mainOffset += childMain + iGap;
+        }
+        crossOffset += line.crossSize + lGap;
+    }
+
+    return finalSize;
+}
+
+} // namespace gut
+
+
+// --- elements/DockPanel.cpp ---
+
+#include <algorithm>
+#include <cmath>
+
+namespace gut {
+
+void DockPanel::setDock(Element& element, Dock value) {
+    element.setAttachedProperty("DockPanel.Dock", static_cast<u8>(value));
+}
+
+Dock DockPanel::getDock(const Element& element) {
+    return static_cast<Dock>(element.getAttachedProperty<u8>("DockPanel.Dock", static_cast<u8>(Dock::Left)));
+}
+
+Size2f DockPanel::measureOverride(Size2f availableSize) {
+    f32 leftAccum = 0, topAccum = 0, rightAccum = 0, bottomAccum = 0;
+    f32 maxWidth = 0, maxHeight = 0;
+
+    for (usize i = 0; i < m_children.size(); ++i) {
+        auto& child = m_children[i];
+        Dock dock = getDock(*child);
+
+        // Remaining available space
+        f32 remainW = std::max(0.0f, availableSize.width  - leftAccum - rightAccum);
+        f32 remainH = std::max(0.0f, availableSize.height - topAccum  - bottomAccum);
+        child->measure({remainW, remainH});
+        Size2f cs = child->desiredSize();
+
+        switch (dock) {
+        case Dock::Left:
+            maxHeight = std::max(maxHeight, topAccum + bottomAccum + cs.height);
+            leftAccum += cs.width;
+            break;
+        case Dock::Right:
+            maxHeight = std::max(maxHeight, topAccum + bottomAccum + cs.height);
+            rightAccum += cs.width;
+            break;
+        case Dock::Top:
+            maxWidth = std::max(maxWidth, leftAccum + rightAccum + cs.width);
+            topAccum += cs.height;
+            break;
+        case Dock::Bottom:
+            maxWidth = std::max(maxWidth, leftAccum + rightAccum + cs.width);
+            bottomAccum += cs.height;
+            break;
+        }
+    }
+
+    maxWidth  = std::max(maxWidth,  leftAccum + rightAccum);
+    maxHeight = std::max(maxHeight, topAccum  + bottomAccum);
+    return {maxWidth, maxHeight};
+}
+
+Size2f DockPanel::arrangeOverride(Size2f finalSize) {
+    f32 leftAccum = 0, topAccum = 0, rightAccum = 0, bottomAccum = 0;
+
+    usize count = m_children.size();
+    for (usize i = 0; i < count; ++i) {
+        auto& child = m_children[i];
+        Size2f cs = child->desiredSize();
+
+        f32 remainW = std::max(0.0f, finalSize.width  - leftAccum - rightAccum);
+        f32 remainH = std::max(0.0f, finalSize.height - topAccum  - bottomAccum);
+
+        // Last child fills remaining space if enabled
+        bool isLast = (i == count - 1);
+        if (isLast && lastChildFill()) {
+            child->arrange({leftAccum, topAccum, remainW, remainH});
+            break;
+        }
+
+        Dock dock = getDock(*child);
+        Rectf rect;
+        switch (dock) {
+        case Dock::Left:
+            rect = {leftAccum, topAccum, cs.width, remainH};
+            leftAccum += cs.width;
+            break;
+        case Dock::Right:
+            rect = {finalSize.width - rightAccum - cs.width, topAccum, cs.width, remainH};
+            rightAccum += cs.width;
+            break;
+        case Dock::Top:
+            rect = {leftAccum, topAccum, remainW, cs.height};
+            topAccum += cs.height;
+            break;
+        case Dock::Bottom:
+            rect = {leftAccum, finalSize.height - bottomAccum - cs.height, remainW, cs.height};
+            bottomAccum += cs.height;
+            break;
+        }
+        child->arrange(rect);
+    }
+
+    return finalSize;
+}
+
+} // namespace gut
+
+
+// --- elements/ViewBox.cpp ---
+
+#include <algorithm>
+#include <cmath>
+
+namespace gut {
+
+Size2f ViewBox::measureOverride(Size2f availableSize) {
+    if (m_children.empty()) return {0, 0};
+
+    // Measure the (first) child at infinite space to get its natural size
+    auto& child = m_children[0];
+    child->measure({INFINITY, INFINITY});
+    Size2f childNatural = child->desiredSize();
+
+    if (childNatural.width <= 0 || childNatural.height <= 0) return {0, 0};
+
+    // The ViewBox itself wants the constrained version of the child's natural aspect ratio
+    f32 aspect = childNatural.width / childNatural.height;
+
+    // If available size is finite, constrain to it keeping aspect
+    f32 w = availableSize.width;
+    f32 h = availableSize.height;
+    bool wInf = std::isinf(w);
+    bool hInf = std::isinf(h);
+
+    if (wInf && hInf) return childNatural;
+    if (wInf) return {h * aspect, h};
+    if (hInf) return {w, w / aspect};
+
+    // Both finite — fit to available
+    f32 scaleW = w / childNatural.width;
+    f32 scaleH = h / childNatural.height;
+    f32 scale  = std::min(scaleW, scaleH);
+    return {childNatural.width * scale, childNatural.height * scale};
+}
+
+Size2f ViewBox::arrangeOverride(Size2f finalSize) {
+    if (m_children.empty()) {
+        m_scaleX = m_scaleY = 1.0f;
+        m_offsetX = m_offsetY = 0.0f;
+        return finalSize;
+    }
+
+    auto& child = m_children[0];
+    Size2f childNatural = child->desiredSize();
+    if (childNatural.width <= 0 || childNatural.height <= 0) {
+        m_scaleX = m_scaleY = 1.0f;
+        m_offsetX = m_offsetY = 0.0f;
+        child->arrange({0, 0, finalSize.width, finalSize.height});
+        return finalSize;
+    }
+
+    switch (stretch()) {
+    case ViewBoxStretch::None:
+        m_scaleX = m_scaleY = 1.0f;
+        break;
+    case ViewBoxStretch::Fill:
+        m_scaleX = finalSize.width  / childNatural.width;
+        m_scaleY = finalSize.height / childNatural.height;
+        break;
+    case ViewBoxStretch::Uniform: {
+        f32 s = std::min(finalSize.width / childNatural.width,
+                         finalSize.height / childNatural.height);
+        m_scaleX = m_scaleY = s;
+        break;
+    }
+    case ViewBoxStretch::UniformToFill: {
+        f32 s = std::max(finalSize.width / childNatural.width,
+                         finalSize.height / childNatural.height);
+        m_scaleX = m_scaleY = s;
+        break;
+    }
+    }
+
+    f32 scaledW = childNatural.width  * m_scaleX;
+    f32 scaledH = childNatural.height * m_scaleY;
+
+    // Center the content
+    m_offsetX = (finalSize.width  - scaledW) * 0.5f;
+    m_offsetY = (finalSize.height - scaledH) * 0.5f;
+
+    // Arrange the child at its natural size; renderChildren will scale
+    child->arrange({0, 0, childNatural.width, childNatural.height});
+
+    return finalSize;
+}
+
+void ViewBox::renderChildren(RenderContext& ctx) {
+    if (m_children.empty()) return;
+
+    ctx.save();
+    ctx.translate(m_offsetX, m_offsetY);
+    ctx.scale(m_scaleX, m_scaleY);
+
+    // Render only the first child
+    m_children[0]->render(ctx);
+
+    ctx.restore();
+}
+
+} // namespace gut
+
+
+// --- elements/AnchorPanel.cpp ---
+
+#include <algorithm>
+#include <cmath>
+
+namespace gut {
+
+// --- Anchor ratio attached properties ---
+
+void AnchorPanel::setAnchorLeft(Element& element, f32 value)   { element.setAttachedProperty("AnchorPanel.AnchorLeft",   value); }
+f32  AnchorPanel::getAnchorLeft(const Element& element)        { return element.getAttachedProperty<f32>("AnchorPanel.AnchorLeft",   0.0f); }
+
+void AnchorPanel::setAnchorTop(Element& element, f32 value)    { element.setAttachedProperty("AnchorPanel.AnchorTop",    value); }
+f32  AnchorPanel::getAnchorTop(const Element& element)         { return element.getAttachedProperty<f32>("AnchorPanel.AnchorTop",    0.0f); }
+
+void AnchorPanel::setAnchorRight(Element& element, f32 value)  { element.setAttachedProperty("AnchorPanel.AnchorRight",  value); }
+f32  AnchorPanel::getAnchorRight(const Element& element)       { return element.getAttachedProperty<f32>("AnchorPanel.AnchorRight",  1.0f); }
+
+void AnchorPanel::setAnchorBottom(Element& element, f32 value) { element.setAttachedProperty("AnchorPanel.AnchorBottom", value); }
+f32  AnchorPanel::getAnchorBottom(const Element& element)      { return element.getAttachedProperty<f32>("AnchorPanel.AnchorBottom", 1.0f); }
+
+// --- Offset (pixels) attached properties ---
+
+void AnchorPanel::setOffsetLeft(Element& element, f32 value)   { element.setAttachedProperty("AnchorPanel.OffsetLeft",   value); }
+f32  AnchorPanel::getOffsetLeft(const Element& element)        { return element.getAttachedProperty<f32>("AnchorPanel.OffsetLeft",   NAN); }
+
+void AnchorPanel::setOffsetTop(Element& element, f32 value)    { element.setAttachedProperty("AnchorPanel.OffsetTop",    value); }
+f32  AnchorPanel::getOffsetTop(const Element& element)         { return element.getAttachedProperty<f32>("AnchorPanel.OffsetTop",    NAN); }
+
+void AnchorPanel::setOffsetRight(Element& element, f32 value)  { element.setAttachedProperty("AnchorPanel.OffsetRight",  value); }
+f32  AnchorPanel::getOffsetRight(const Element& element)       { return element.getAttachedProperty<f32>("AnchorPanel.OffsetRight",  NAN); }
+
+void AnchorPanel::setOffsetBottom(Element& element, f32 value) { element.setAttachedProperty("AnchorPanel.OffsetBottom", value); }
+f32  AnchorPanel::getOffsetBottom(const Element& element)      { return element.getAttachedProperty<f32>("AnchorPanel.OffsetBottom", NAN); }
+
+Size2f AnchorPanel::measureOverride(Size2f availableSize) {
+    // Measure all children at infinite — they are positioned absolutely
+    for (auto& child : m_children) {
+        child->measure({INFINITY, INFINITY});
+    }
+    return availableSize;
+}
+
+Size2f AnchorPanel::arrangeOverride(Size2f finalSize) {
+    const f32 pw = finalSize.width;
+    const f32 ph = finalSize.height;
+
+    for (auto& child : m_children) {
+        Size2f cs = child->desiredSize();
+
+        f32 anchorL = getAnchorLeft(*child);
+        f32 anchorT = getAnchorTop(*child);
+        f32 anchorR = getAnchorRight(*child);
+        f32 anchorB = getAnchorBottom(*child);
+
+        f32 offL = getOffsetLeft(*child);
+        f32 offT = getOffsetTop(*child);
+        f32 offR = getOffsetRight(*child);
+        f32 offB = getOffsetBottom(*child);
+
+        bool hasL = !std::isnan(offL);
+        bool hasT = !std::isnan(offT);
+        bool hasR = !std::isnan(offR);
+        bool hasB = !std::isnan(offB);
+
+        f32 x, y, w, h;
+
+        // --- Horizontal ---
+        if (hasL && hasR) {
+            // Stretch between two anchors + offsets
+            f32 left  = anchorL * pw + offL;
+            f32 right = anchorR * pw - offR;
+            x = left;
+            w = std::max(0.0f, right - left);
+        } else if (hasL) {
+            x = anchorL * pw + offL;
+            w = cs.width;
+        } else if (hasR) {
+            x = anchorR * pw - offR - cs.width;
+            w = cs.width;
+        } else {
+            // No offset set — just place at anchor position
+            x = anchorL * pw;
+            w = cs.width;
+        }
+
+        // --- Vertical ---
+        if (hasT && hasB) {
+            f32 top    = anchorT * ph + offT;
+            f32 bottom = anchorB * ph - offB;
+            y = top;
+            h = std::max(0.0f, bottom - top);
+        } else if (hasT) {
+            y = anchorT * ph + offT;
+            h = cs.height;
+        } else if (hasB) {
+            y = anchorB * ph - offB - cs.height;
+            h = cs.height;
+        } else {
+            y = anchorT * ph;
+            h = cs.height;
+        }
+
+        child->arrange({x, y, w, h});
+    }
+
+    return finalSize;
+}
+
+} // namespace gut
+
+
 // --- elements/Text.cpp ---
 
 
@@ -15871,7 +16704,8 @@ Text::Text(String textContent, f32 size) {
 Size2f Text::measureOverride(Size2f availableSize) {
     // Try to use the real font system
     if (context()) {
-        Font* font = context()->defaultFont();
+        Font* font = context()->findFont(fontFamily(), effectiveFontWeight(), effectiveFontStyle());
+        if (!font) font = context()->defaultFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -15983,7 +16817,8 @@ static std::string truncateWithEllipsis(FontFace* face, const std::string& text,
 
 void Text::onRender(RenderContext& ctx) {
     if (context()) {
-        Font* font = context()->defaultFont();
+        Font* font = context()->findFont(fontFamily(), effectiveFontWeight(), effectiveFontStyle());
+        if (!font) font = context()->defaultFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -18725,9 +19560,19 @@ void Image::onRender(RenderContext& ctx) {
             destRect = {x, y, scaledWidth, scaledHeight};
             break;
         }
+        
+        case Stretch::NineSlice:
+            // destRect is the full bounds; drawImageNineSlice handles the slicing
+            break;
     }
     
-    if (m_hasSourceRect) {
+    if (stretch() == Stretch::NineSlice) {
+        if (m_hasSourceRect) {
+            ctx.drawImageNineSlice(*m_texture, m_sourceRect, sliceBorders(), destRect, tint());
+        } else {
+            ctx.drawImageNineSlice(*m_texture, sliceBorders(), destRect, tint());
+        }
+    } else if (m_hasSourceRect) {
         ctx.drawImage(*m_texture, m_sourceRect, destRect, tint());
     } else {
         ctx.drawImage(*m_texture, destRect, tint());
@@ -19947,12 +20792,93 @@ Ref<Font> Context::loadFont(const u8* data, size_t size) {
         return nullptr;
     }
     
+    // Auto-register in the font registry
+    registerFont(font);
+    
     // Set as default font if we don't have one yet
     if (!m_defaultFont) {
         m_defaultFont = font;
     }
     
     return font;
+}
+
+Ref<Font> Context::loadFont(const u8* data, size_t size,
+                            const std::string& family,
+                            FontWeight weight,
+                            FontStyle  style) {
+    auto font = makeRef<Font>();
+    // Pre-set metadata before loading so initStbFont() won't overwrite
+    font->setFamily(family);
+    font->setWeight(weight);
+    font->setStyle(style);
+    if (!font->loadFromMemory(data, size)) {
+        return nullptr;
+    }
+    
+    registerFont(font);
+    
+    if (!m_defaultFont) {
+        m_defaultFont = font;
+    }
+    
+    return font;
+}
+
+void Context::registerFont(Ref<Font> font) {
+    if (!font) return;
+    FontKey key{font->family(), font->weight(), font->style()};
+    m_fontRegistry[key] = font;
+}
+
+Font* Context::findFont(const std::string& family,
+                        FontWeight weight,
+                        FontStyle  style) const {
+    if (m_fontRegistry.empty())
+        return m_defaultFont.get();
+    
+    // Resolve generic family names ("sans-serif", "", etc.) to the default
+    // font's actual family so that weight/style selection works.
+    const std::string& resolvedFamily =
+        (!family.empty() && family != "sans-serif" && family != "serif"
+         && family != "monospace")
+            ? family
+            : (m_defaultFont ? m_defaultFont->family() : family);
+    
+    // 1. Exact match
+    {
+        auto it = m_fontRegistry.find(FontKey{resolvedFamily, weight, style});
+        if (it != m_fontRegistry.end())
+            return it->second.get();
+    }
+    
+    // 2. Same family + style, nearest weight
+    {
+        Font* best = nullptr;
+        int bestDist = INT_MAX;
+        for (auto& [key, f] : m_fontRegistry) {
+            if (key.family == resolvedFamily && key.style == style) {
+                int dist = std::abs(static_cast<int>(key.weight)
+                                  - static_cast<int>(weight));
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = f.get();
+                }
+            }
+        }
+        if (best) return best;
+    }
+    
+    // 3. Same family, any weight/style
+    {
+        for (auto& [key, f] : m_fontRegistry) {
+            if (key.family == resolvedFamily)
+                return f.get();
+        }
+    }
+    
+    // 4. Fallback to default
+    return m_defaultFont.get();
 }
 
 void Context::setDefaultFont(Ref<Font> font) {

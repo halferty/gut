@@ -9,5 +9,18 @@ compile_commands.json
 CMakeUserPresets.json
 .vscode/
 
+# Windows
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.exp
+*.obj
+Thumbs.db
+Desktop.ini
+
 # Compiled example binaries
 examples/metal_demo
+examples/chat_demo
+examples/controls_demo

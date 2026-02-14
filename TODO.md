@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 49 done, 9 partial, 8 missing** out of 63 core features.
+**Score: 56 done, 10 partial, 1 missing** out of 63 core features.
 
 ---
 
@@ -12,10 +12,10 @@
 - [x] Margin / Padding — on all elements
 - [x] Alignment — HorizontalAlignment, VerticalAlignment
 - [x] Min/Max constraints — minWidth, maxWidth, minHeight, maxHeight
-- [ ] WrapPanel — flow layout with line wrapping
-- [ ] DockPanel — dock children to edges
-- [ ] ViewBox — scale-to-fit container
-- [ ] Anchor layout — left+right pins = auto-stretch on resize
+- [x] WrapPanel — flow layout with line wrapping
+- [x] DockPanel — dock children to edges
+- [x] ViewBox — scale-to-fit container
+- [x] Anchor layout — left+right pins = auto-stretch on resize
 
 ## Rendering
 
@@ -36,18 +36,18 @@
 - [ ] Transforms — rotation, scale, skew on elements
 - [x] Backdrop blur / frosted glass
 - [ ] Blend modes — multiply, screen, overlay, etc.
-- [ ] 9-slice / 9-patch image rendering
-- [ ] Render-to-texture — offscreen render targets
+- [x] 9-slice / 9-patch image rendering — drawImageNineSlice, Image::Stretch::NineSlice, sliceBorders property
+- [p] Render-to-texture — offscreen render targets (PUNT)
 
 ## Text
 
 - [x] Text element — stb_truetype glyph atlas rendering
 - [x] Font size
-- [ ] Font weight / style — properties declared, not used for font selection
+- [x] Font weight / style — FontWeight/FontStyle properties, auto-detection from OS/2+head tables, font registry lookup
 - [x] Text alignment — Left, Center, Right applied during render via drawTextMultiline
 - [x] Text wrapping — word wrap via TextShaper::shapeMultiline in render path
 - [x] Text truncation / ellipsis — CharacterEllipsis + WordEllipsis, single-line
-- [ ] Multiple font families — fontFamily property exists, no font matching
+- [~] Multiple font families — font registry with findFont(family, weight, style) best-match lookup; no system font enumeration
 - [ ] Text selection
 - [ ] Rich text / inline formatting — bold, italic, color spans within one block
 - [ ] Text shadow
@@ -107,7 +107,7 @@
 - [ ] Path animation — animate along a curve
 - [ ] Layout animation — animate child add/remove/reorder
 
-## System
+## Systemii
 
 - [x] Property system — GUT_PROPERTY with change signals, one-way binding
 - [x] Ref counting — intrusive Ref\<T\>, make\<T\>()
@@ -115,18 +115,18 @@
 - [x] Z-index / stacking order
 - [x] Styles / theming — CSS selectors, stylesheets, Theme with defaultLight/defaultDark
 - [x] Visual tree walking — findByName, findByType, recursive
-- [ ] Two-way data binding — only one-way currently
+- [p] Two-way data binding — only one-way currently (PUNT)
 - [ ] Resource dictionary — no generic keyed resource store
 - [ ] Command system — ICommand-style abstraction for actions
 - [ ] Undo / redo
-- [ ] Serialization — save/load UI tree from markup
-- [ ] Debug overlay — layout inspector, render stats, FPS counter
-- [ ] Accessibility — screen reader roles, labels, navigation
+- [p] Serialization — save/load UI tree from markup (PUNT)
+- [p] Debug overlay — layout inspector, render stats, FPS counter (PUNT)
+- [p] Accessibility — screen reader roles, labels, navigation (PUNT)
 
 ## Platform / Backend
 
 - [x] macOS Metal backend
-- [ ] Windows backend — D3D11 or D3D12
-- [ ] Linux backend — Vulkan or OpenGL
-- [ ] Web backend — WebGPU or Canvas
-- [ ] Multiple windows
+- [x] Windows backend — D3D11 and D3D12
+- [p] Linux backend — Vulkan or OpenGL (PUNT)
+- [p] Web backend — WebGPU or Canvas (PUNT)
+- [p] Multiple windows (PUNT)
