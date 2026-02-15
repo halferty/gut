@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 65 done, 7 partial, 0 missing** out of 67 core features.
+**Score: 78 done, 2 partial, 12 punted, 17 remaining** out of 109 features.
 
 ---
 
@@ -38,6 +38,7 @@
 - [x] Path rendering — Path flattening (quad/cubic/arc subdivision), ear-clipping fill, polyline stroke
 - [x] Polylines — drawPolyline with miter/bevel/round joins, flat/square/round caps, fillPolygon via ear-clipping
 - [x] Transforms — per-element scaleX/scaleY/rotation/skewX/skewY (centre-origin), full affine matrix, inverse hit-test
+- [ ] Perspective transforms — 3×3 homogeneous matrix, quad mapping (trapezoid), per-vertex or per-pixel 1/w divide, projective inverse hit-test
 - [x] Backdrop blur / frosted glass
 - [p] Blend modes — multiply, screen, overlay, etc. (PUNT)
 - [x] 9-slice / 9-patch image rendering — drawImageNineSlice, Image::Stretch::NineSlice, sliceBorders property
@@ -51,11 +52,12 @@
 - [x] Text alignment — Left, Center, Right applied during render via drawTextMultiline
 - [x] Text wrapping — word wrap via TextShaper::shapeMultiline in render path
 - [x] Text truncation / ellipsis — CharacterEllipsis + WordEllipsis, single-line
-- [~] Multiple font families — font registry with findFont(family, weight, style) best-match lookup; no system font enumeration
+- [~] Multiple font families — font registry with findFont(family, weight, style) best-match lookup; no system font enumeration (also, what about bundled fonts with the app?)
 - [p] Text selection (PUNT)
 - [p] Rich text / inline formatting — bold, italic, color spans within one block (PUNT)
-- [ ] Text shadow
-- [ ] Text outline / stroke
+- [x] Text shadow — textShadowColor/Offset/BlurRadius, hard + soft (multi-pass blur) shadows
+- [x] Text outline / stroke — textStrokeColor/Width, 8–16 direction multi-pass outline
+- [x] Text glow — textGlowColor/Radius, multi-ring radial spread with alpha falloff
 
 ## Input / Interaction
 
@@ -85,9 +87,9 @@
 - [x] DropDown (selection menu, scroll, auto up/down direction)
 - [x] ProgressBar — determinate (0–100%), indeterminate pulse, % in bar, label below, themed colours
 - [x] Table — scrollable data table, clickable column headers with sort callback, row selection, keyboard nav
-- [ ] Tooltip
-- [ ] ContextMenu
-- [x] TabControl
+- [x] Tooltip — Tooltip::set(element, text), overlay-based popup on hover, auto-positioning within window bounds
+- [x] ContextMenu — right-click popup menu with items, separators, disabled items, hover highlight, overlay/captureMouse
+- [x] TabControl — scrollable tabs with < > arrow buttons when overflow, keyboard nav, hover highlight
 - [ ] ListView / ItemsControl
 - [ ] TreeView
 - [x] Dialog / Modal — modal overlay with backdrop, draggable title bar, close (X), configurable buttons (OK/Cancel/Yes/No), word-wrapping message, Escape/Enter keys

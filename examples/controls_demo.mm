@@ -96,6 +96,29 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
 }
 
 // =============================================================================
+// Helper: Panel that fires a callback on right-click (for ContextMenu demo)
+// =============================================================================
+class RightClickPanel : public gut::Panel {
+    GUT_OBJECT(RightClickPanel, gut::Panel)
+public:
+    RightClickPanel() = default;
+    void setOnRightClick(std::function<void(const gut::MouseEvent&)> cb) {
+        m_onRightClick = std::move(cb);
+    }
+protected:
+    bool onMouseEvent(const gut::MouseEvent& event) override {
+        if (event.type == gut::MouseEventType::ButtonDown &&
+            event.button == gut::MouseButton::Right && m_onRightClick) {
+            m_onRightClick(event);
+            return true;
+        }
+        return gut::Panel::onMouseEvent(event);
+    }
+private:
+    std::function<void(const gut::MouseEvent&)> m_onRightClick;
+};
+
+// =============================================================================
 // Metal View
 // =============================================================================
 
@@ -1754,6 +1777,1096 @@ static gut::ModifierKeys macModifiersToGut(NSEventModifierFlags flags) {
         }
 
         tabControl->addTab("Dialog", page);
+    }
+
+    // =====================================================================
+    // TAB 7 — "Transforms"  (Scale / Rotate / Skew / Combined)
+    // =====================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(W - 40);
+        page->setheight(H - 95 - 34);
+
+        const float pi = 3.14159265f;
+
+        // ---- Column 1: Rotation ----
+        {
+            f32 sx = 10, sy = 15;
+
+            auto sectionLabel = make<Text>("Rotation", 13.0f);
+            sectionLabel->setforeground(c(180, 180, 200));
+            sectionLabel->setisHitTestVisible(false);
+            page->addChild(sectionLabel);
+            Canvas::setLeft(*sectionLabel, sx);
+            Canvas::setTop(*sectionLabel, sy);
+
+            auto desc = make<Text>("Per-element rotation around centre", 10.0f);
+            desc->setforeground(c(120, 120, 140));
+            desc->setisHitTestVisible(false);
+            page->addChild(desc);
+            Canvas::setLeft(*desc, sx);
+            Canvas::setTop(*desc, sy + 20);
+
+            // Row of boxes at 0, 15, 45, 90 degrees
+            struct RotSample { float deg; Color col; };
+            RotSample rots[] = {
+                {0,   c(80, 150, 240)},
+                {15,  c(200, 100, 60)},
+                {45,  c(60, 180, 100)},
+                {90,  c(220, 160, 40)},
+            };
+            for (int i = 0; i < 4; i++) {
+                f32 bx = sx + i * 68;
+                f32 by = sy + 48;
+                auto box = make<Panel>();
+                box->setwidth(50); box->setheight(50);
+                box->setcornerRadius(6.0f);
+                box->setbackground(rots[i].col);
+                if (rots[i].deg != 0)
+                    box->setrotation(rots[i].deg * pi / 180.0f);
+                page->addChild(box);
+                Canvas::setLeft(*box, bx);
+                Canvas::setTop(*box, by);
+
+                char buf[16]; snprintf(buf, sizeof(buf), "%.0f\xc2\xb0", rots[i].deg);
+                auto lbl = make<Text>(buf, 10.0f);
+                lbl->setforeground(c(140, 140, 160));
+                lbl->setisHitTestVisible(false);
+                page->addChild(lbl);
+                Canvas::setLeft(*lbl, bx + 12);
+                Canvas::setTop(*lbl, by + 56);
+            }
+
+            // Row 2: 180° with text, -30° with text
+            {
+                f32 by2 = sy + 130;
+                auto box = make<Panel>();
+                box->setwidth(60); box->setheight(35);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(150, 80, 200));
+                box->setrotation(pi);
+                page->addChild(box);
+                Canvas::setLeft(*box, sx);
+                Canvas::setTop(*box, by2);
+
+                auto t = make<Text>("Hi", 14.0f);
+                t->setforeground(c(255, 255, 255));
+                t->setisHitTestVisible(false);
+                box->addChild(t);
+                Canvas::setLeft(*t, 8);
+                Canvas::setTop(*t, 6);
+
+                auto lbl = make<Text>("180\xc2\xb0", 10.0f);
+                lbl->setforeground(c(140, 140, 160));
+                lbl->setisHitTestVisible(false);
+                page->addChild(lbl);
+                Canvas::setLeft(*lbl, sx + 14);
+                Canvas::setTop(*lbl, by2 + 42);
+            }
+            {
+                f32 by2 = sy + 130;
+                auto box = make<Panel>();
+                box->setwidth(60); box->setheight(35);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(50, 160, 180));
+                box->setrotation(-30.0f * pi / 180.0f);
+                page->addChild(box);
+                Canvas::setLeft(*box, sx + 90);
+                Canvas::setTop(*box, by2);
+
+                auto t = make<Text>("Tilt", 14.0f);
+                t->setforeground(c(255, 255, 255));
+                t->setisHitTestVisible(false);
+                box->addChild(t);
+                Canvas::setLeft(*t, 6);
+                Canvas::setTop(*t, 6);
+
+                auto lbl = make<Text>("-30\xc2\xb0", 10.0f);
+                lbl->setforeground(c(140, 140, 160));
+                lbl->setisHitTestVisible(false);
+                page->addChild(lbl);
+                Canvas::setLeft(*lbl, sx + 100);
+                Canvas::setTop(*lbl, by2 + 42);
+            }
+
+            // Rotated interactive button
+            {
+                f32 by3 = sy + 200;
+                auto heading = make<Text>("Rotated Button", 12.0f);
+                heading->setforeground(c(180, 180, 200));
+                heading->setisHitTestVisible(false);
+                page->addChild(heading);
+                Canvas::setLeft(*heading, sx);
+                Canvas::setTop(*heading, by3);
+
+                auto subdesc = make<Text>("Interactive at 10\xc2\xb0", 10.0f);
+                subdesc->setforeground(c(120, 120, 140));
+                subdesc->setisHitTestVisible(false);
+                page->addChild(subdesc);
+                Canvas::setLeft(*subdesc, sx);
+                Canvas::setTop(*subdesc, by3 + 18);
+
+                auto btn = make<Button>("Click Me");
+                btn->setwidth(120);
+                btn->setheight(36);
+                btn->setrotation(10.0f * pi / 180.0f);
+                btn->setbackground(c(60, 130, 220));
+                btn->setforeground(c(255, 255, 255));
+                btn->sethoverBackground(c(70, 140, 235));
+                btn->setpressedBackground(c(50, 110, 190));
+                btn->setcornerRadius(6.0f);
+                page->addChild(btn);
+                Canvas::setLeft(*btn, sx + 20);
+                Canvas::setTop(*btn, by3 + 42);
+            }
+        }
+
+        // Vertical divider
+        {
+            auto vline = make<Panel>();
+            vline->setwidth(1);
+            vline->setheight(420);
+            vline->setbackground(c(50, 50, 62));
+            page->addChild(vline);
+            Canvas::setLeft(*vline, 250);
+            Canvas::setTop(*vline, 10);
+        }
+
+        // ---- Column 2: Scale ----
+        {
+            f32 sx = 270, sy = 15;
+
+            auto sectionLabel = make<Text>("Element Scale", 13.0f);
+            sectionLabel->setforeground(c(180, 180, 200));
+            sectionLabel->setisHitTestVisible(false);
+            page->addChild(sectionLabel);
+            Canvas::setLeft(*sectionLabel, sx);
+            Canvas::setTop(*sectionLabel, sy);
+
+            auto desc = make<Text>("Per-element scaleX / scaleY", 10.0f);
+            desc->setforeground(c(120, 120, 140));
+            desc->setisHitTestVisible(false);
+            page->addChild(desc);
+            Canvas::setLeft(*desc, sx);
+            Canvas::setTop(*desc, sy + 20);
+
+            // Row: 1x, 1.5x, 0.6x
+            struct ScaleSample { float sx_; float sy_; Color col; const char* label; };
+            ScaleSample scales[] = {
+                {1.0f, 1.0f, c(80, 150, 240), "1.0x"},
+                {1.5f, 1.5f, c(200, 100, 60), "1.5x"},
+                {0.6f, 0.6f, c(60, 180, 100), "0.6x"},
+            };
+            for (int i = 0; i < 3; i++) {
+                f32 bx = sx + i * 70;
+                f32 by = sy + 48;
+                auto box = make<Panel>();
+                box->setwidth(50); box->setheight(50);
+                box->setcornerRadius(6.0f);
+                box->setbackground(scales[i].col);
+                box->setscaleX(scales[i].sx_);
+                box->setscaleY(scales[i].sy_);
+                page->addChild(box);
+                Canvas::setLeft(*box, bx);
+                Canvas::setTop(*box, by);
+
+                auto lbl = make<Text>(scales[i].label, 10.0f);
+                lbl->setforeground(c(140, 140, 160));
+                lbl->setisHitTestVisible(false);
+                page->addChild(lbl);
+                Canvas::setLeft(*lbl, bx + 10);
+                Canvas::setTop(*lbl, by + 56);
+            }
+
+            // Non-uniform scale
+            {
+                f32 by2 = sy + 130;
+                auto box1 = make<Panel>();
+                box1->setwidth(50); box1->setheight(50);
+                box1->setcornerRadius(25.0f);
+                box1->setbackground(c(200, 80, 200));
+                box1->setscaleX(1.8f); box1->setscaleY(1.0f);
+                page->addChild(box1);
+                Canvas::setLeft(*box1, sx);
+                Canvas::setTop(*box1, by2);
+
+                auto lbl1 = make<Text>("1.8x \xc3\x97 1.0x", 10.0f);
+                lbl1->setforeground(c(140, 140, 160));
+                lbl1->setisHitTestVisible(false);
+                page->addChild(lbl1);
+                Canvas::setLeft(*lbl1, sx);
+                Canvas::setTop(*lbl1, by2 + 56);
+
+                auto box2 = make<Panel>();
+                box2->setwidth(50); box2->setheight(50);
+                box2->setcornerRadius(25.0f);
+                box2->setbackground(c(255, 200, 60));
+                box2->setscaleX(1.0f); box2->setscaleY(1.8f);
+                page->addChild(box2);
+                Canvas::setLeft(*box2, sx + 100);
+                Canvas::setTop(*box2, by2);
+
+                auto lbl2 = make<Text>("1.0x \xc3\x97 1.8x", 10.0f);
+                lbl2->setforeground(c(140, 140, 160));
+                lbl2->setisHitTestVisible(false);
+                page->addChild(lbl2);
+                Canvas::setLeft(*lbl2, sx + 100);
+                Canvas::setTop(*lbl2, by2 + 56);
+            }
+
+            // Scaled interactive button
+            {
+                f32 by3 = sy + 220;
+                auto heading = make<Text>("Scaled Button", 12.0f);
+                heading->setforeground(c(180, 180, 200));
+                heading->setisHitTestVisible(false);
+                page->addChild(heading);
+                Canvas::setLeft(*heading, sx);
+                Canvas::setTop(*heading, by3);
+
+                auto subdesc = make<Text>("Interactive at 1.3x scale", 10.0f);
+                subdesc->setforeground(c(120, 120, 140));
+                subdesc->setisHitTestVisible(false);
+                page->addChild(subdesc);
+                Canvas::setLeft(*subdesc, sx);
+                Canvas::setTop(*subdesc, by3 + 18);
+
+                auto btn = make<Button>("Click Me");
+                btn->setwidth(100);
+                btn->setheight(36);
+                btn->setscaleX(1.3f);
+                btn->setscaleY(1.3f);
+                btn->setbackground(c(60, 130, 220));
+                btn->setforeground(c(255, 255, 255));
+                btn->sethoverBackground(c(70, 140, 235));
+                btn->setpressedBackground(c(50, 110, 190));
+                btn->setcornerRadius(6.0f);
+                page->addChild(btn);
+                Canvas::setLeft(*btn, sx + 20);
+                Canvas::setTop(*btn, by3 + 42);
+            }
+        }
+
+        // Vertical divider
+        {
+            auto vline = make<Panel>();
+            vline->setwidth(1);
+            vline->setheight(420);
+            vline->setbackground(c(50, 50, 62));
+            page->addChild(vline);
+            Canvas::setLeft(*vline, 490);
+            Canvas::setTop(*vline, 10);
+        }
+
+        // ---- Column 3: Skew & Combined ----
+        {
+            f32 sx = 510, sy = 15;
+
+            auto sectionLabel = make<Text>("Skew", 13.0f);
+            sectionLabel->setforeground(c(180, 180, 200));
+            sectionLabel->setisHitTestVisible(false);
+            page->addChild(sectionLabel);
+            Canvas::setLeft(*sectionLabel, sx);
+            Canvas::setTop(*sectionLabel, sy);
+
+            auto desc = make<Text>("Horizontal and vertical shear", 10.0f);
+            desc->setforeground(c(120, 120, 140));
+            desc->setisHitTestVisible(false);
+            page->addChild(desc);
+            Canvas::setLeft(*desc, sx);
+            Canvas::setTop(*desc, sy + 20);
+
+            // Skew samples
+            struct SkewSample { float skX; float skY; Color col; const char* label; };
+            SkewSample skews[] = {
+                {15, 0,  c(80, 150, 240), "skewX 15\xc2\xb0"},
+                {30, 0,  c(200, 100, 60), "skewX 30\xc2\xb0"},
+                {0,  20, c(60, 180, 100), "skewY 20\xc2\xb0"},
+            };
+            for (int i = 0; i < 3; i++) {
+                f32 bx = sx + i * 75;
+                f32 by = sy + 48;
+                auto box = make<Panel>();
+                box->setwidth(50); box->setheight(50);
+                box->setbackground(skews[i].col);
+                if (skews[i].skX != 0) box->setskewX(skews[i].skX * pi / 180.0f);
+                if (skews[i].skY != 0) box->setskewY(skews[i].skY * pi / 180.0f);
+                page->addChild(box);
+                Canvas::setLeft(*box, bx);
+                Canvas::setTop(*box, by);
+
+                auto lbl = make<Text>(skews[i].label, 9.0f);
+                lbl->setforeground(c(140, 140, 160));
+                lbl->setisHitTestVisible(false);
+                page->addChild(lbl);
+                Canvas::setLeft(*lbl, bx);
+                Canvas::setTop(*lbl, by + 56);
+            }
+
+            // Combined skew
+            {
+                f32 by2 = sy + 130;
+                auto box = make<Panel>();
+                box->setwidth(60); box->setheight(60);
+                box->setbackground(c(220, 160, 40));
+                box->setskewX(15.0f * pi / 180.0f);
+                box->setskewY(10.0f * pi / 180.0f);
+                page->addChild(box);
+                Canvas::setLeft(*box, sx);
+                Canvas::setTop(*box, by2);
+
+                auto lbl = make<Text>("X+Y skew", 10.0f);
+                lbl->setforeground(c(140, 140, 160));
+                lbl->setisHitTestVisible(false);
+                page->addChild(lbl);
+                Canvas::setLeft(*lbl, sx);
+                Canvas::setTop(*lbl, by2 + 66);
+
+                // Italic-style text skew
+                auto box2 = make<Panel>();
+                box2->setwidth(80); box2->setheight(40);
+                box2->setcornerRadius(6.0f);
+                box2->setbackground(c(150, 80, 200));
+                box2->setskewX(-12.0f * pi / 180.0f);
+                page->addChild(box2);
+                Canvas::setLeft(*box2, sx + 90);
+                Canvas::setTop(*box2, by2 + 5);
+
+                auto t = make<Text>("Slanted", 14.0f);
+                t->setforeground(c(255, 255, 255));
+                t->setisHitTestVisible(false);
+                box2->addChild(t);
+                Canvas::setLeft(*t, 10);
+                Canvas::setTop(*t, 8);
+
+                auto lbl2 = make<Text>("skewX -12\xc2\xb0", 10.0f);
+                lbl2->setforeground(c(140, 140, 160));
+                lbl2->setisHitTestVisible(false);
+                page->addChild(lbl2);
+                Canvas::setLeft(*lbl2, sx + 90);
+                Canvas::setTop(*lbl2, by2 + 52);
+            }
+
+            // ---- Combined Transforms ----
+            {
+                f32 by3 = sy + 230;
+
+                auto heading = make<Text>("Combined Transforms", 12.0f);
+                heading->setforeground(c(180, 180, 200));
+                heading->setisHitTestVisible(false);
+                page->addChild(heading);
+                Canvas::setLeft(*heading, sx);
+                Canvas::setTop(*heading, by3);
+
+                auto subdesc = make<Text>("Scale + Rotate + Skew together", 10.0f);
+                subdesc->setforeground(c(120, 120, 140));
+                subdesc->setisHitTestVisible(false);
+                page->addChild(subdesc);
+                Canvas::setLeft(*subdesc, sx);
+                Canvas::setTop(*subdesc, by3 + 18);
+
+                // Scale + Rotate
+                {
+                    f32 bx = sx, by = by3 + 42;
+                    auto box = make<Panel>();
+                    box->setwidth(50); box->setheight(50);
+                    box->setcornerRadius(6.0f);
+                    box->setbackground(c(80, 150, 240));
+                    box->setscaleX(1.3f); box->setscaleY(1.3f);
+                    box->setrotation(20.0f * pi / 180.0f);
+                    page->addChild(box);
+                    Canvas::setLeft(*box, bx);
+                    Canvas::setTop(*box, by);
+
+                    auto lbl = make<Text>("1.3x+20\xc2\xb0", 9.0f);
+                    lbl->setforeground(c(140, 140, 160));
+                    lbl->setisHitTestVisible(false);
+                    page->addChild(lbl);
+                    Canvas::setLeft(*lbl, bx);
+                    Canvas::setTop(*lbl, by + 56);
+                }
+                // Rotate + Skew
+                {
+                    f32 bx = sx + 75, by = by3 + 42;
+                    auto box = make<Panel>();
+                    box->setwidth(50); box->setheight(50);
+                    box->setbackground(c(200, 100, 60));
+                    box->setrotation(-15.0f * pi / 180.0f);
+                    box->setskewX(20.0f * pi / 180.0f);
+                    page->addChild(box);
+                    Canvas::setLeft(*box, bx);
+                    Canvas::setTop(*box, by);
+
+                    auto lbl = make<Text>("-15\xc2\xb0+skX", 9.0f);
+                    lbl->setforeground(c(140, 140, 160));
+                    lbl->setisHitTestVisible(false);
+                    page->addChild(lbl);
+                    Canvas::setLeft(*lbl, bx);
+                    Canvas::setTop(*lbl, by + 56);
+                }
+                // All three
+                {
+                    f32 bx = sx + 150, by = by3 + 42;
+                    auto box = make<Panel>();
+                    box->setwidth(70); box->setheight(70);
+                    box->setcornerRadius(8.0f);
+                    box->setbackground(c(220, 80, 120));
+                    box->setscaleX(1.2f); box->setscaleY(0.8f);
+                    box->setrotation(25.0f * pi / 180.0f);
+                    box->setskewX(10.0f * pi / 180.0f);
+                    page->addChild(box);
+                    Canvas::setLeft(*box, bx);
+                    Canvas::setTop(*box, by);
+
+                    auto t = make<Text>("All 3", 13.0f);
+                    t->setforeground(c(255, 255, 255));
+                    t->setisHitTestVisible(false);
+                    box->addChild(t);
+                    Canvas::setLeft(*t, 12);
+                    Canvas::setTop(*t, 24);
+
+                    auto lbl = make<Text>("S+R+Sk", 9.0f);
+                    lbl->setforeground(c(140, 140, 160));
+                    lbl->setisHitTestVisible(false);
+                    page->addChild(lbl);
+                    Canvas::setLeft(*lbl, bx);
+                    Canvas::setTop(*lbl, by + 78);
+                }
+
+                // Full transform interactive button
+                {
+                    f32 by4 = by3 + 140;
+                    auto btnHead = make<Text>("Full Transform Button", 11.0f);
+                    btnHead->setforeground(c(180, 180, 200));
+                    btnHead->setisHitTestVisible(false);
+                    page->addChild(btnHead);
+                    Canvas::setLeft(*btnHead, sx);
+                    Canvas::setTop(*btnHead, by4);
+
+                    auto btn = make<Button>("Click Me");
+                    btn->setwidth(130);
+                    btn->setheight(36);
+                    btn->setscaleX(1.2f); btn->setscaleY(1.2f);
+                    btn->setrotation(12.0f * pi / 180.0f);
+                    btn->setskewX(8.0f * pi / 180.0f);
+                    btn->setbackground(c(60, 130, 220));
+                    btn->setforeground(c(255, 255, 255));
+                    btn->sethoverBackground(c(70, 140, 235));
+                    btn->setpressedBackground(c(50, 110, 190));
+                    btn->setcornerRadius(6.0f);
+                    page->addChild(btn);
+                    Canvas::setLeft(*btn, sx + 20);
+                    Canvas::setTop(*btn, by4 + 22);
+                }
+            }
+        }
+
+        tabControl->addTab("Transforms", page);
+    }
+
+    // =====================================================================
+    // TAB 8 — "Text Effects"  (Shadow / Stroke / Glow)
+    // =====================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(W - 40);
+        page->setheight(H - 95 - 34);
+
+        // ---- Column 1: Text Shadow ----
+        {
+            f32 sx = 10, sy = 15;
+
+            auto heading = make<Text>("Text Shadow", 13.0f);
+            heading->setforeground(c(180, 180, 200));
+            heading->setisHitTestVisible(false);
+            page->addChild(heading);
+            Canvas::setLeft(*heading, sx);
+            Canvas::setTop(*heading, sy);
+
+            // Hard shadow
+            {
+                auto t = make<Text>("Hard Shadow", 22.0f);
+                t->setforeground(c(255, 255, 255));
+                t->settextShadowColor(c(0, 0, 0, 180));
+                t->settextShadowOffsetX(3.0f);
+                t->settextShadowOffsetY(3.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 30);
+            }
+
+            // Soft shadow
+            {
+                auto t = make<Text>("Soft Shadow", 22.0f);
+                t->setforeground(c(255, 255, 255));
+                t->settextShadowColor(c(0, 0, 0, 160));
+                t->settextShadowOffsetX(2.0f);
+                t->settextShadowOffsetY(4.0f);
+                t->settextShadowBlurRadius(4.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 70);
+            }
+
+            // Coloured shadow
+            {
+                auto t = make<Text>("Colour Shadow", 22.0f);
+                t->setforeground(c(255, 220, 100));
+                t->settextShadowColor(c(200, 60, 20, 180));
+                t->settextShadowOffsetX(2.0f);
+                t->settextShadowOffsetY(3.0f);
+                t->settextShadowBlurRadius(2.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 110);
+            }
+
+            // Long drop
+            {
+                auto t = make<Text>("Long Drop", 22.0f);
+                t->setforeground(c(100, 200, 255));
+                t->settextShadowColor(c(0, 0, 0, 120));
+                t->settextShadowOffsetX(5.0f);
+                t->settextShadowOffsetY(5.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 150);
+            }
+
+            // Multiple shadow on small text
+            {
+                auto t = make<Text>("Small text with shadow", 12.0f);
+                t->setforeground(c(220, 220, 240));
+                t->settextShadowColor(c(0, 0, 0, 200));
+                t->settextShadowOffsetX(1.0f);
+                t->settextShadowOffsetY(1.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 195);
+            }
+        }
+
+        // Vertical divider
+        {
+            auto vline = make<Panel>();
+            vline->setwidth(1);
+            vline->setheight(420);
+            vline->setbackground(c(50, 50, 62));
+            page->addChild(vline);
+            Canvas::setLeft(*vline, 250);
+            Canvas::setTop(*vline, 10);
+        }
+
+        // ---- Column 2: Text Outline / Stroke ----
+        {
+            f32 sx = 270, sy = 15;
+
+            auto heading = make<Text>("Text Outline / Stroke", 13.0f);
+            heading->setforeground(c(180, 180, 200));
+            heading->setisHitTestVisible(false);
+            page->addChild(heading);
+            Canvas::setLeft(*heading, sx);
+            Canvas::setTop(*heading, sy);
+
+            // Basic outline
+            {
+                auto t = make<Text>("Outlined", 26.0f);
+                t->setforeground(c(255, 255, 255));
+                t->settextStrokeColor(c(0, 0, 0));
+                t->settextStrokeWidth(1.5f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 30);
+            }
+
+            // Thick coloured outline
+            {
+                auto t = make<Text>("Bold Stroke", 26.0f);
+                t->setforeground(c(255, 200, 60));
+                t->settextStrokeColor(c(140, 60, 20));
+                t->settextStrokeWidth(2.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 75);
+            }
+
+            // Neon outline (bright stroke on dark fill)
+            {
+                auto t = make<Text>("Neon", 30.0f);
+                t->setforeground(c(20, 20, 30));
+                t->settextStrokeColor(c(0, 255, 200));
+                t->settextStrokeWidth(1.5f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 120);
+            }
+
+            // Outline + Shadow combined
+            {
+                auto t = make<Text>("Stroke + Shadow", 22.0f);
+                t->setforeground(c(255, 255, 255));
+                t->settextStrokeColor(c(60, 60, 80));
+                t->settextStrokeWidth(1.5f);
+                t->settextShadowColor(c(0, 0, 0, 140));
+                t->settextShadowOffsetX(2.0f);
+                t->settextShadowOffsetY(2.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 170);
+            }
+
+            // Small text outline
+            {
+                auto t = make<Text>("Small outlined text", 12.0f);
+                t->setforeground(c(220, 220, 240));
+                t->settextStrokeColor(c(60, 60, 80));
+                t->settextStrokeWidth(1.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 215);
+            }
+        }
+
+        // Vertical divider
+        {
+            auto vline = make<Panel>();
+            vline->setwidth(1);
+            vline->setheight(420);
+            vline->setbackground(c(50, 50, 62));
+            page->addChild(vline);
+            Canvas::setLeft(*vline, 490);
+            Canvas::setTop(*vline, 10);
+        }
+
+        // ---- Column 3: Text Glow ----
+        {
+            f32 sx = 510, sy = 15;
+
+            auto heading = make<Text>("Text Glow", 13.0f);
+            heading->setforeground(c(180, 180, 200));
+            heading->setisHitTestVisible(false);
+            page->addChild(heading);
+            Canvas::setLeft(*heading, sx);
+            Canvas::setTop(*heading, sy);
+
+            // Blue glow
+            {
+                auto t = make<Text>("Blue Glow", 22.0f);
+                t->setforeground(c(200, 220, 255));
+                t->settextGlowColor(c(80, 140, 255, 120));
+                t->settextGlowRadius(5.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 30);
+            }
+
+            // Fire glow
+            {
+                auto t = make<Text>("Fire Glow", 22.0f);
+                t->setforeground(c(255, 240, 200));
+                t->settextGlowColor(c(255, 100, 20, 100));
+                t->settextGlowRadius(6.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 75);
+            }
+
+            // Green glow
+            {
+                auto t = make<Text>("Toxic", 28.0f);
+                t->setforeground(c(180, 255, 100));
+                t->settextGlowColor(c(80, 200, 40, 90));
+                t->settextGlowRadius(6.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 120);
+            }
+
+            // Glow + Stroke
+            {
+                auto t = make<Text>("Glow+Stroke", 22.0f);
+                t->setforeground(c(255, 255, 255));
+                t->settextGlowColor(c(200, 60, 255, 100));
+                t->settextGlowRadius(5.0f);
+                t->settextStrokeColor(c(120, 20, 180));
+                t->settextStrokeWidth(1.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 175);
+            }
+
+            // All three combined
+            {
+                auto t = make<Text>("All Effects", 24.0f);
+                t->setforeground(c(255, 255, 255));
+                t->settextShadowColor(c(0, 0, 0, 160));
+                t->settextShadowOffsetX(3.0f);
+                t->settextShadowOffsetY(3.0f);
+                t->settextShadowBlurRadius(3.0f);
+                t->settextStrokeColor(c(40, 40, 60));
+                t->settextStrokeWidth(1.5f);
+                t->settextGlowColor(c(100, 180, 255, 80));
+                t->settextGlowRadius(4.0f);
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, sy + 225);
+            }
+        }
+
+        tabControl->addTab("Text Effects", page);
+    }
+
+    // =====================================================================
+    // TAB 9 — "Tooltips & Menus"
+    // =====================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(W - 40);
+        page->setheight(H - 95 - 34);
+
+        f32 sx = 20, sy = 20;
+
+        // ── Left column: Tooltips ────────────────────────────────────
+        {
+            auto t = make<Text>("Tooltips", 16.0f);
+            t->setforeground(c(200, 200, 220));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, sx);
+            Canvas::setTop(*t, sy);
+        }
+        {
+            auto t = make<Text>("Hover over elements below to see their tooltips.", 10.5f);
+            t->setforeground(c(110, 110, 130));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, sx);
+            Canvas::setTop(*t, sy + 24);
+        }
+
+        // Tooltip on a Button
+        {
+            f32 by = sy + 60;
+            auto btn = make<Button>("Save File");
+            btn->setwidth(130);
+            btn->setheight(32);
+            btn->setbackground(c(55, 55, 72));
+            btn->sethoverBackground(c(65, 65, 85));
+            btn->setpressedBackground(c(50, 50, 65));
+            btn->setforeground(c(200, 200, 220));
+            btn->setborderColor(c(80, 80, 100));
+            btn->setcornerRadius(5.0f);
+            Tooltip::set(btn, "Save the current document (Ctrl+S)");
+            page->addChild(btn);
+            Canvas::setLeft(*btn, sx);
+            Canvas::setTop(*btn, by);
+        }
+
+        // Tooltip on another Button
+        {
+            f32 by = sy + 60;
+            auto btn = make<Button>("Undo");
+            btn->setwidth(100);
+            btn->setheight(32);
+            btn->setbackground(c(55, 55, 72));
+            btn->sethoverBackground(c(65, 65, 85));
+            btn->setpressedBackground(c(50, 50, 65));
+            btn->setforeground(c(200, 200, 220));
+            btn->setborderColor(c(80, 80, 100));
+            btn->setcornerRadius(5.0f);
+            Tooltip::set(btn, "Undo last action (Ctrl+Z)");
+            page->addChild(btn);
+            Canvas::setLeft(*btn, sx + 145);
+            Canvas::setTop(*btn, by);
+        }
+
+        // Tooltip on a Panel (colored box)
+        {
+            f32 by = sy + 110;
+            auto label = make<Text>("Hover the colored panel:", 10.5f);
+            label->setforeground(c(140, 140, 160));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, sx);
+            Canvas::setTop(*label, by);
+
+            auto panel = make<Panel>();
+            panel->setwidth(140);
+            panel->setheight(60);
+            panel->setbackground(c(60, 100, 180));
+            panel->setcornerRadius(6.0f);
+            panel->setisHitTestVisible(true);
+
+            auto panelLabel = make<Text>("Info Panel", 11.0f);
+            panelLabel->setforeground(c(220, 220, 255));
+            panelLabel->setisHitTestVisible(false);
+            panel->addChild(panelLabel);
+
+            Tooltip::set(panel, "This panel displays context-sensitive information.");
+            page->addChild(panel);
+            Canvas::setLeft(*panel, sx);
+            Canvas::setTop(*panel, by + 20);
+        }
+
+        // Tooltip on a Text element
+        {
+            f32 by = sy + 210;
+            auto t = make<Text>("Hover me for a tooltip!", 12.0f);
+            t->setforeground(c(100, 200, 255));
+            t->setisHitTestVisible(true);
+            Tooltip::set(t, "This is a Text element with a tooltip attached.");
+            page->addChild(t);
+            Canvas::setLeft(*t, sx);
+            Canvas::setTop(*t, by);
+        }
+
+        // Tooltip on a CheckBox
+        {
+            f32 by = sy + 245;
+            auto cb = make<CheckBox>();
+            cb->setlabel("Enable notifications");
+            cb->setforeground(c(180, 180, 200));
+            cb->setcheckmarkColor(c(80, 160, 255));
+            cb->setboxBorderColor(c(100, 100, 120));
+            Tooltip::set(cb, "Toggle desktop notification alerts on or off");
+            page->addChild(cb);
+            Canvas::setLeft(*cb, sx);
+            Canvas::setTop(*cb, by);
+        }
+
+        // Tooltip on a Slider
+        {
+            f32 by = sy + 280;
+            auto label = make<Text>("Volume slider with tooltip:", 10.5f);
+            label->setforeground(c(140, 140, 160));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, sx);
+            Canvas::setTop(*label, by);
+
+            auto slider = make<Slider>();
+            slider->setwidth(180);
+            slider->setheight(20);
+            slider->setminimum(0.0f);
+            slider->setmaximum(100.0f);
+            slider->setvalue(75.0f);
+            slider->settrackBackground(c(50, 50, 65));
+            slider->settrackFillColor(c(80, 160, 255));
+            slider->setthumbColor(c(220, 220, 240));
+            Tooltip::set(slider, "Adjust the master volume level");
+            page->addChild(slider);
+            Canvas::setLeft(*slider, sx);
+            Canvas::setTop(*slider, by + 20);
+        }
+
+        // ── Right column: Context Menus ──────────────────────────────
+        f32 rx = 340;
+
+        {
+            auto t = make<Text>("Context Menus", 16.0f);
+            t->setforeground(c(200, 200, 220));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, rx);
+            Canvas::setTop(*t, sy);
+        }
+        {
+            auto t = make<Text>("Right-click on the panels below to open context menus.", 10.5f);
+            t->setforeground(c(110, 110, 130));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, rx);
+            Canvas::setTop(*t, sy + 24);
+        }
+
+        // Status text for context menu feedback
+        auto menuStatus = make<Text>("Right-click a panel to try", 11.0f);
+        menuStatus->setforeground(c(110, 110, 130));
+        menuStatus->setisHitTestVisible(false);
+        page->addChild(menuStatus);
+        Canvas::setLeft(*menuStatus, rx);
+        Canvas::setTop(*menuStatus, sy + 415);
+
+        // --- Context menu 1: Edit menu ---
+        {
+            f32 by = sy + 60;
+            auto label = make<Text>("Edit Actions", 11.0f);
+            label->setforeground(c(160, 160, 180));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, rx);
+            Canvas::setTop(*label, by);
+
+            auto panelBg = make<RightClickPanel>();
+            panelBg->setwidth(300);
+            panelBg->setheight(80);
+            panelBg->setbackground(c(40, 42, 54));
+            panelBg->setcornerRadius(6.0f);
+            panelBg->setborderColor(c(60, 60, 78));
+            panelBg->setborderWidth(1.0f);
+
+            auto innerText = make<Text>("Right-click here for\nan edit context menu", 11.0f);
+            innerText->setforeground(c(140, 140, 160));
+            innerText->setisHitTestVisible(false);
+            panelBg->addChild(innerText);
+
+            // Create the context menu
+            auto ctxMenu = make<ContextMenu>();
+            root->addChild(ctxMenu);  // needs context
+
+            ctxMenu->addItem("Cut", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(240, 180, 80));
+                menuStatus->settext("Cut selected text");
+            });
+            ctxMenu->addItem("Copy", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(100, 200, 255));
+                menuStatus->settext("Copied to clipboard");
+            });
+            ctxMenu->addItem("Paste", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(80, 200, 120));
+                menuStatus->settext("Pasted from clipboard");
+            });
+            ctxMenu->addSeparator();
+            ctxMenu->addItem("Select All", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(180, 140, 255));
+                menuStatus->settext("Selected all content");
+            });
+
+            auto ctxMenuRaw = ctxMenu.get();
+            panelBg->setOnRightClick([ctxMenuRaw](const gut::MouseEvent& ev) {
+                ctxMenuRaw->showAt(ev.screenPosition.x, ev.screenPosition.y);
+            });
+
+            page->addChild(panelBg);
+            Canvas::setLeft(*panelBg, rx);
+            Canvas::setTop(*panelBg, by + 18);
+        }
+
+        // --- Context menu 2: File operations ---
+        {
+            f32 by = sy + 180;
+            auto label = make<Text>("File Operations", 11.0f);
+            label->setforeground(c(160, 160, 180));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, rx);
+            Canvas::setTop(*label, by);
+
+            auto panelBg = make<RightClickPanel>();
+            panelBg->setwidth(300);
+            panelBg->setheight(80);
+            panelBg->setbackground(c(35, 50, 45));
+            panelBg->setcornerRadius(6.0f);
+            panelBg->setborderColor(c(50, 80, 70));
+            panelBg->setborderWidth(1.0f);
+
+            auto innerText = make<Text>("Right-click here for\nfile operations", 11.0f);
+            innerText->setforeground(c(130, 170, 140));
+            innerText->setisHitTestVisible(false);
+            panelBg->addChild(innerText);
+
+            auto ctxMenu2 = make<ContextMenu>();
+            root->addChild(ctxMenu2);
+
+            ctxMenu2->addItem("New File", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(80, 200, 120));
+                menuStatus->settext("Created new file");
+            });
+            ctxMenu2->addItem("Open...", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(100, 200, 255));
+                menuStatus->settext("Open file dialog would appear");
+            });
+            ctxMenu2->addItem("Save", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(80, 200, 120));
+                menuStatus->settext("File saved!");
+            });
+            ctxMenu2->addSeparator();
+            ctxMenu2->addItem("Delete", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(240, 100, 80));
+                menuStatus->settext("File deleted!");
+            });
+            ctxMenu2->addItem("Disabled Item", []() {}, false);  // disabled
+
+            auto ctxMenu2Raw = ctxMenu2.get();
+            panelBg->setOnRightClick([ctxMenu2Raw](const gut::MouseEvent& ev) {
+                ctxMenu2Raw->showAt(ev.screenPosition.x, ev.screenPosition.y);
+            });
+
+            page->addChild(panelBg);
+            Canvas::setLeft(*panelBg, rx);
+            Canvas::setTop(*panelBg, by + 18);
+        }
+
+        // --- Context menu 3: Color theme ---
+        {
+            f32 by = sy + 300;
+            auto label = make<Text>("Theme Selection", 11.0f);
+            label->setforeground(c(160, 160, 180));
+            label->setisHitTestVisible(false);
+            page->addChild(label);
+            Canvas::setLeft(*label, rx);
+            Canvas::setTop(*label, by);
+
+            auto panelBg = make<RightClickPanel>();
+            panelBg->setwidth(300);
+            panelBg->setheight(60);
+            panelBg->setbackground(c(50, 40, 55));
+            panelBg->setcornerRadius(6.0f);
+            panelBg->setborderColor(c(80, 60, 90));
+            panelBg->setborderWidth(1.0f);
+
+            auto innerText = make<Text>("Right-click for themes", 11.0f);
+            innerText->setforeground(c(170, 140, 190));
+            innerText->setisHitTestVisible(false);
+            panelBg->addChild(innerText);
+
+            auto ctxMenu3 = make<ContextMenu>();
+            root->addChild(ctxMenu3);
+
+            ctxMenu3->addItem("Dark Theme", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(180, 180, 200));
+                menuStatus->settext("Switched to Dark Theme");
+            });
+            ctxMenu3->addItem("Light Theme", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(240, 240, 220));
+                menuStatus->settext("Switched to Light Theme");
+            });
+            ctxMenu3->addItem("Solarized", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(180, 200, 120));
+                menuStatus->settext("Switched to Solarized");
+            });
+            ctxMenu3->addSeparator();
+            ctxMenu3->addItem("Custom...", [menuStatus]() {
+                menuStatus->setforeground(gut::Color::fromRgba8(200, 160, 255));
+                menuStatus->settext("Custom theme editor would open");
+            });
+
+            auto ctxMenu3Raw = ctxMenu3.get();
+            panelBg->setOnRightClick([ctxMenu3Raw](const gut::MouseEvent& ev) {
+                ctxMenu3Raw->showAt(ev.screenPosition.x, ev.screenPosition.y);
+            });
+
+            page->addChild(panelBg);
+            Canvas::setLeft(*panelBg, rx);
+            Canvas::setTop(*panelBg, by + 18);
+        }
+
+        tabControl->addTab("Tooltips & Menus", page);
     }
 
     _context->setRoot(root);

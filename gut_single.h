@@ -4049,6 +4049,8 @@ protected:
     friend class Context;
     friend class InputManager;
     friend class FocusManager;
+    friend class Tooltip;
+    friend class ContextMenu;
 
     /// Get the owning context (set when element is added to a rooted tree)
     Context* context() const { return m_context; }
@@ -4835,6 +4837,24 @@ public:
     GUT_PROPERTY(bool, underline, false)
     GUT_PROPERTY(bool, strikethrough, false)
     
+    // -------------------------------------------------------------------------
+    // Text Effects — Shadow / Outline (Stroke) / Glow
+    // -------------------------------------------------------------------------
+    
+    /// Drop shadow: colour, offset, blur radius
+    GUT_PROPERTY(Color, textShadowColor, Color::transparent())
+    GUT_PROPERTY(f32, textShadowOffsetX, 2.0f)
+    GUT_PROPERTY(f32, textShadowOffsetY, 2.0f)
+    GUT_PROPERTY(f32, textShadowBlurRadius, 0.0f)
+    
+    /// Outline / stroke around each glyph
+    GUT_PROPERTY(Color, textStrokeColor, Color::transparent())
+    GUT_PROPERTY(f32, textStrokeWidth, 1.0f)
+    
+    /// Outer glow (similar to Photoshop outer glow)
+    GUT_PROPERTY(Color, textGlowColor, Color::transparent())
+    GUT_PROPERTY(f32, textGlowRadius, 4.0f)
+    
     /// Resolve the effective font weight (fontWeight property, or Bold if bold()==true).
     FontWeight effectiveFontWeight() const {
         if (bold() && fontWeight() == FontWeight::Normal)
@@ -5513,9 +5533,19 @@ private:
     isize m_hoveredTab{-1};
     std::function<void(isize)> m_onTabChanged;
 
+    // Scroll state (when tabs overflow)
+    f32 m_tabScrollOffset{0.0f};
+    bool m_leftArrowHovered{false};
+    bool m_rightArrowHovered{false};
+
     // Helpers
     isize tabIndexAtX(f32 x) const;
     f32 tabHeaderWidth(const String& title) const;
+    f32 totalTabsWidth() const;
+    bool needsScroll() const;
+    f32 scrollArrowWidth() const { return 28.0f; }
+    f32 scrollableRegionWidth() const;
+    void ensureTabVisible(isize index);
 };
 
 } // namespace gut
@@ -5850,6 +5880,161 @@ private:
 
     static constexpr f32 kCloseButtonSize = 16.0f;
     static constexpr f32 kPadding = 20.0f;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/Tooltip.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief Lightweight tooltip that appears on hover.
+ *
+ * Attach a Tooltip to any element via Tooltip::set(element, text).
+ * The tooltip appears after a configurable delay and positions itself
+ * near the mouse cursor using the overlay system.
+ *
+ * Usage:
+ *     auto btn = make<Button>("Hover me");
+ *     Tooltip::set(btn, "This is a helpful tooltip");
+ */
+class GUT_API Tooltip {
+public:
+    /// Attach a tooltip to an element. Pass empty text to remove.
+    static void set(Ref<Element> element, String text);
+
+    /// Attach with custom delay (ms).
+    static void set(Ref<Element> element, String text, f32 delayMs);
+
+    // -------------------------------------------------------------------------
+    // Global appearance configuration
+    // -------------------------------------------------------------------------
+    struct Style {
+        Color background{Color::fromRgba8(40, 40, 55, 240)};
+        Color foreground{Color::fromRgba8(220, 220, 240, 255)};
+        Color borderColor{Color::fromRgba8(80, 80, 100, 200)};
+        f32 fontSize{11.0f};
+        f32 cornerRadius{4.0f};
+        f32 paddingH{8.0f};
+        f32 paddingV{5.0f};
+        f32 offsetY{20.0f};     // below cursor
+        f32 delayMs{500.0f};    // default show delay
+        f32 maxWidth{300.0f};   // word-wrap threshold
+    };
+
+    static Style& style();
+
+private:
+    Tooltip() = default;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/ContextMenu.h ---
+
+
+
+namespace gut {
+
+/**
+ * @brief A popup context menu that appears on right-click.
+ *
+ * Define menu items, then attach to elements via ContextMenu::attachTo().
+ * The menu appears at the click position as an overlay and dismisses when
+ * an item is clicked or the user clicks outside.
+ *
+ * Usage:
+ *     auto menu = make<ContextMenu>();
+ *     menu->addItem("Cut",   [&]{ doCut(); });
+ *     menu->addItem("Copy",  [&]{ doCopy(); });
+ *     menu->addItem("Paste", [&]{ doPaste(); });
+ *     menu->addSeparator();
+ *     menu->addItem("Delete", [&]{ doDelete(); });
+ *     menu->attachTo(somePanel);
+ */
+class GUT_API ContextMenu : public Element {
+    GUT_OBJECT(ContextMenu, Element)
+
+public:
+    ContextMenu();
+    ~ContextMenu() override = default;
+
+    // -------------------------------------------------------------------------
+    // Items
+    // -------------------------------------------------------------------------
+
+    struct MenuItem {
+        String label;
+        std::function<void()> action;
+        bool separator{false};
+        bool enabled{true};
+    };
+
+    void addItem(String label, std::function<void()> action, bool enabled = true);
+    void addSeparator();
+    void clearItems();
+    usize itemCount() const { return m_items.size(); }
+
+    // -------------------------------------------------------------------------
+    // Attach / show / hide
+    // -------------------------------------------------------------------------
+
+    /// Attach to an element — installs a right-click handler.
+    void attachTo(Ref<Element> element);
+
+    /// Show the menu at a specific position (screen coordinates).
+    void showAt(f32 x, f32 y);
+
+    /// Programmatically close the menu.
+    void close();
+
+    bool isOpen() const { return m_isOpen; }
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, fontSize, 12.0f)
+    GUT_PROPERTY(f32, itemHeight, 26.0f)
+    GUT_PROPERTY(f32, menuWidth, 180.0f)
+    GUT_PROPERTY(f32, cornerRadius, 6.0f)
+    GUT_PROPERTY(f32, separatorHeight, 1.0f)
+
+    GUT_PROPERTY(Color, menuBackground, Color::fromRgba8(35, 35, 48, 245))
+    GUT_PROPERTY(Color, menuBorderColor, Color::fromRgba8(70, 70, 90, 200))
+    GUT_PROPERTY(Color, itemForeground, Color::fromRgba8(210, 210, 230, 255))
+    GUT_PROPERTY(Color, itemHoverBackground, Color::fromRgba8(60, 100, 200, 255))
+    GUT_PROPERTY(Color, itemHoverForeground, Color::fromRgba8(255, 255, 255, 255))
+    GUT_PROPERTY(Color, disabledForeground, Color::fromRgba8(100, 100, 120, 255))
+    GUT_PROPERTY(Color, separatorColor, Color::fromRgba8(60, 60, 78, 200))
+
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+    void setOnClosed(std::function<void()> cb) { m_onClosed = std::move(cb); }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+
+private:
+    std::vector<MenuItem> m_items;
+    bool m_isOpen{false};
+    f32 m_popupX{0.0f};
+    f32 m_popupY{0.0f};
+    isize m_hoveredItemIndex{-1};
+    std::function<void()> m_onClosed;
+
+    void renderPopupOverlay(RenderContext& ctx);
+    f32 totalMenuHeight() const;
+    isize itemIndexAtY(f32 localY) const;
 };
 
 } // namespace gut
@@ -18392,20 +18577,90 @@ void Text::onRender(RenderContext& ctx) {
                     renderText = truncateWithEllipsis(face.get(), renderText, maxW, wordBreak);
                 }
                 
-                if (wrapping || aligned) {
-                    auto toGlobalAlign = [](TextAlignment a) -> gut::TextAlignment {
-                        switch (a) {
-                            case TextAlignment::Center: return gut::TextAlignment::Center;
-                            case TextAlignment::Right:  return gut::TextAlignment::Right;
-                            case TextAlignment::Justify: return gut::TextAlignment::Justify;
-                            default: return gut::TextAlignment::Left;
+                auto toGlobalAlign = [](TextAlignment a) -> gut::TextAlignment {
+                    switch (a) {
+                        case TextAlignment::Center: return gut::TextAlignment::Center;
+                        case TextAlignment::Right:  return gut::TextAlignment::Right;
+                        case TextAlignment::Justify: return gut::TextAlignment::Justify;
+                        default: return gut::TextAlignment::Left;
+                    }
+                };
+                
+                // Helper lambda: draw the text at a given position with a given colour
+                auto drawPass = [&](f32 ox, f32 oy, Color col) {
+                    if (wrapping || aligned) {
+                        ctx.drawTextMultiline(face.get(), renderText, {x + ox, y + oy}, col,
+                                              maxW, toGlobalAlign(textAlignment()));
+                    } else {
+                        ctx.drawText(face.get(), renderText, {x + ox, y + oy}, col);
+                    }
+                };
+                
+                // ---- Pass 1: Glow (outermost layer) ----
+                if (textGlowColor().a > 0 && textGlowRadius() > 0) {
+                    const int rings = std::max(2, static_cast<int>(textGlowRadius()));
+                    const int samples = 12;  // angular samples per ring
+                    f32 baseAlpha = static_cast<f32>(textGlowColor().a) / 255.0f;
+                    for (int r = 1; r <= rings; r++) {
+                        f32 t = static_cast<f32>(r) / static_cast<f32>(rings);
+                        f32 radius = t * textGlowRadius();
+                        f32 alpha = baseAlpha * (1.0f - t * 0.7f) / static_cast<f32>(rings);
+                        Color gc = Color::fromRgba8(textGlowColor().r, textGlowColor().g, textGlowColor().b,
+                                                    static_cast<u8>(std::min(255.0f, alpha * 255.0f)));
+                        for (int s = 0; s < samples; s++) {
+                            f32 angle = static_cast<f32>(s) * (2.0f * 3.14159265f / static_cast<f32>(samples));
+                            f32 dx = radius * std::cos(angle);
+                            f32 dy = radius * std::sin(angle);
+                            drawPass(dx, dy, gc);
                         }
-                    };
-                    ctx.drawTextMultiline(face.get(), renderText, {x, y}, foreground(),
-                                          maxW, toGlobalAlign(textAlignment()));
-                } else {
-                    ctx.drawText(face.get(), renderText, {x, y}, foreground());
+                    }
                 }
+                
+                // ---- Pass 2: Shadow ----
+                if (textShadowColor().a > 0 &&
+                    (textShadowOffsetX() != 0 || textShadowOffsetY() != 0 || textShadowBlurRadius() > 0)) {
+                    if (textShadowBlurRadius() > 0) {
+                        // Soft shadow: multi-pass ring around offset
+                        const int blurSteps = std::max(2, static_cast<int>(textShadowBlurRadius()));
+                        const int blurSamples = 8;
+                        f32 baseAlpha = static_cast<f32>(textShadowColor().a) / 255.0f;
+                        for (int r = 0; r <= blurSteps; r++) {
+                            f32 t = static_cast<f32>(r) / static_cast<f32>(blurSteps);
+                            f32 radius = t * textShadowBlurRadius();
+                            f32 alpha = baseAlpha * (1.0f - t * 0.6f) / static_cast<f32>(blurSteps + 1);
+                            Color sc = Color::fromRgba8(textShadowColor().r, textShadowColor().g, textShadowColor().b,
+                                                        static_cast<u8>(std::min(255.0f, alpha * 255.0f)));
+                            if (r == 0) {
+                                drawPass(textShadowOffsetX(), textShadowOffsetY(), sc);
+                            } else {
+                                for (int s = 0; s < blurSamples; s++) {
+                                    f32 angle = static_cast<f32>(s) * (2.0f * 3.14159265f / static_cast<f32>(blurSamples));
+                                    drawPass(textShadowOffsetX() + radius * std::cos(angle),
+                                             textShadowOffsetY() + radius * std::sin(angle), sc);
+                                }
+                            }
+                        }
+                    } else {
+                        // Hard shadow: single pass at offset
+                        drawPass(textShadowOffsetX(), textShadowOffsetY(), textShadowColor());
+                    }
+                }
+                
+                // ---- Pass 3: Outline / Stroke ----
+                if (textStrokeColor().a > 0 && textStrokeWidth() > 0) {
+                    f32 sw = textStrokeWidth();
+                    // 8-direction outline for thin strokes, more samples for thicker
+                    int steps = (sw <= 1.5f) ? 8 : 16;
+                    for (int s = 0; s < steps; s++) {
+                        f32 angle = static_cast<f32>(s) * (2.0f * 3.14159265f / static_cast<f32>(steps));
+                        f32 dx = sw * std::cos(angle);
+                        f32 dy = sw * std::sin(angle);
+                        drawPass(dx, dy, textStrokeColor());
+                    }
+                }
+                
+                // ---- Pass 4: Normal foreground text (topmost) ----
+                drawPass(0, 0, foreground());
                 return;
             }
         }
@@ -19943,6 +20198,8 @@ void TabControl::selectTab(isize index) {
     // Show new
     m_tabs[static_cast<usize>(index)].content->setvisibility(Visibility::Visible);
 
+    ensureTabVisible(index);
+
     if (m_onTabChanged) m_onTabChanged(index);
     invalidateLayout();
     invalidateRender();
@@ -19964,11 +20221,66 @@ f32 TabControl::tabHeaderWidth(const String& title) const {
     return w;
 }
 
+f32 TabControl::totalTabsWidth() const {
+    f32 total = tabSpacing();
+    for (const auto& tab : m_tabs) {
+        total += tabHeaderWidth(tab.title) + tabSpacing();
+    }
+    return total;
+}
+
+bool TabControl::needsScroll() const {
+    return totalTabsWidth() > bounds().width;
+}
+
+f32 TabControl::scrollableRegionWidth() const {
+    f32 bw = bounds().width;
+    if (needsScroll()) {
+        return bw - scrollArrowWidth() * 2.0f;  // both arrow buttons
+    }
+    return bw;
+}
+
+void TabControl::ensureTabVisible(isize index) {
+    if (index < 0 || index >= static_cast<isize>(m_tabs.size())) return;
+    if (!needsScroll()) { m_tabScrollOffset = 0; return; }
+
+    // Compute the left and right edge of the target tab
+    f32 left = tabSpacing();
+    for (isize i = 0; i < index; ++i) {
+        left += tabHeaderWidth(m_tabs[static_cast<usize>(i)].title) + tabSpacing();
+    }
+    f32 right = left + tabHeaderWidth(m_tabs[static_cast<usize>(index)].title);
+
+    f32 visW = scrollableRegionWidth();
+    if (left - m_tabScrollOffset < 0) {
+        m_tabScrollOffset = left - tabSpacing();
+    } else if (right - m_tabScrollOffset > visW) {
+        m_tabScrollOffset = right - visW + tabSpacing();
+    }
+    // Clamp
+    f32 maxOff = totalTabsWidth() - visW;
+    if (m_tabScrollOffset > maxOff) m_tabScrollOffset = maxOff;
+    if (m_tabScrollOffset < 0) m_tabScrollOffset = 0;
+}
+
 isize TabControl::tabIndexAtX(f32 x) const {
-    f32 cx = tabSpacing();
+    bool scrolling = needsScroll();
+    f32 leftArrowW = scrolling ? scrollArrowWidth() : 0.0f;
+    f32 rightEdge = scrolling ? bounds().width - scrollArrowWidth() : bounds().width;
+
+    // Clicks on arrow regions don't hit tabs
+    if (scrolling && (x < leftArrowW || x >= rightEdge)) return -1;
+
+    f32 cx = tabSpacing() - m_tabScrollOffset + leftArrowW;
     for (isize i = 0; i < static_cast<isize>(m_tabs.size()); ++i) {
         f32 tw = tabHeaderWidth(m_tabs[static_cast<usize>(i)].title);
-        if (x >= cx && x < cx + tw) return i;
+        f32 tabLeft = cx;
+        f32 tabRight = cx + tw;
+        // Only consider visible region
+        if (tabRight > leftArrowW && tabLeft < rightEdge) {
+            if (x >= tabLeft && x < tabRight) return i;
+        }
         cx += tw + tabSpacing();
     }
     return -1;
@@ -19984,7 +20296,6 @@ Size2f TabControl::measureOverride(Size2f availableSize) {
     Size2f maxContent = {0, 0};
     for (auto& tab : m_tabs) {
         auto oldVis = tab.content->visibility();
-        // Temporarily make visible for measure
         tab.content->setvisibility(Visibility::Visible);
         tab.content->measure(contentAvail);
         Size2f ds = tab.content->desiredSize();
@@ -20011,6 +20322,11 @@ Size2f TabControl::arrangeOverride(Size2f finalSize) {
 void TabControl::onRender(RenderContext& ctx) {
     f32 bw = bounds().width;
     f32 barH = tabBarHeight();
+    bool scrolling = needsScroll();
+    f32 leftArrowW = scrolling ? scrollArrowWidth() : 0.0f;
+    f32 rightArrowW = scrolling ? scrollArrowWidth() : 0.0f;
+    f32 visibleStart = leftArrowW;
+    f32 visibleEnd = bw - rightArrowW;
 
     // Tab bar background
     ctx.fillRect({0, 0, bw, barH}, tabBarBackground());
@@ -20020,33 +20336,88 @@ void TabControl::onRender(RenderContext& ctx) {
     Ref<FontFace> face;
     if (font) face = font->getFace(tabFontSize());
 
-    f32 cx = tabSpacing();
+    f32 cx = tabSpacing() - m_tabScrollOffset + leftArrowW;
     for (isize i = 0; i < static_cast<isize>(m_tabs.size()); ++i) {
         const auto& tab = m_tabs[static_cast<usize>(i)];
         f32 tw = tabHeaderWidth(tab.title);
         bool active = (i == selectedIndex());
         bool hovered = (i == m_hoveredTab);
 
-        // Tab background on hover
-        if (hovered && !active) {
-            ctx.fillRect({cx, 0, tw, barH}, tabHoverBackground());
+        // Skip tabs that are completely outside the visible region
+        if (cx + tw < visibleStart || cx > visibleEnd) {
+            cx += tw + tabSpacing();
+            continue;
         }
 
-        // Tab text
-        if (face) {
+        // Clip to visible region
+        f32 drawLeft = std::max(cx, visibleStart);
+        f32 drawRight = std::min(cx + tw, visibleEnd);
+        f32 drawW = drawRight - drawLeft;
+        if (drawW <= 0) { cx += tw + tabSpacing(); continue; }
+
+        // Tab background on hover
+        if (hovered && !active) {
+            ctx.fillRect({drawLeft, 0, drawW, barH}, tabHoverBackground());
+        }
+
+        // Tab text (only if the tab is substantially visible)
+        if (face && drawW > 10.0f) {
             Color fg = active ? tabActiveForeground() : tabForeground();
             f32 textW = face->measureWidth(tab.title);
             f32 textX = cx + (tw - textW) * 0.5f;
             f32 textY = (barH - face->lineHeight()) * 0.5f + face->ascender();
+
+            // Clip text drawing
+            ctx.save();
+            ctx.pushClip({drawLeft, 0, drawW, barH});
             ctx.drawText(face.get(), tab.title, {textX, textY}, fg);
+            ctx.popClip();
+            ctx.restore();
         }
 
         // Active indicator (bottom bar)
         if (active) {
-            ctx.fillRect({cx, barH - 2.0f, tw, 2.0f}, tabActiveIndicator());
+            ctx.fillRect({drawLeft, barH - 2.0f, drawW, 2.0f}, tabActiveIndicator());
         }
 
         cx += tw + tabSpacing();
+    }
+
+    // --- Scroll arrow buttons ---
+    if (scrolling) {
+        bool canScrollLeft = (m_tabScrollOffset > 0.5f);
+        bool canScrollRight = (m_tabScrollOffset < totalTabsWidth() - scrollableRegionWidth() - 0.5f);
+
+        // Left arrow button background
+        {
+            Color bg = m_leftArrowHovered ? tabHoverBackground() : tabBarBackground();
+            ctx.fillRect({0, 0, leftArrowW, barH}, bg);
+            // Draw left chevron (‹)
+            Color fg = canScrollLeft ? tabActiveForeground() : Color::fromRgba8(80, 80, 100, 255);
+            if (face) {
+                f32 textY = (barH - face->lineHeight()) * 0.5f + face->ascender();
+                f32 chevW = face->measureWidth("<");
+                ctx.drawText(face.get(), "<", {(leftArrowW - chevW) * 0.5f, textY}, fg);
+            }
+            // Separator
+            ctx.fillRect({leftArrowW - 1.0f, 2.0f, 1.0f, barH - 4.0f}, tabBarBorderColor());
+        }
+
+        // Right arrow button background
+        {
+            f32 rx = bw - rightArrowW;
+            Color bg = m_rightArrowHovered ? tabHoverBackground() : tabBarBackground();
+            ctx.fillRect({rx, 0, rightArrowW, barH}, bg);
+            // Draw right chevron (›)
+            Color fg = canScrollRight ? tabActiveForeground() : Color::fromRgba8(80, 80, 100, 255);
+            if (face) {
+                f32 textY = (barH - face->lineHeight()) * 0.5f + face->ascender();
+                f32 chevW = face->measureWidth(">");
+                ctx.drawText(face.get(), ">", {rx + (rightArrowW - chevW) * 0.5f, textY}, fg);
+            }
+            // Separator
+            ctx.fillRect({rx, 2.0f, 1.0f, barH - 4.0f}, tabBarBorderColor());
+        }
     }
 
     // Tab bar bottom border
@@ -20065,10 +20436,30 @@ void TabControl::onRender(RenderContext& ctx) {
 
 bool TabControl::onMouseEvent(const MouseEvent& event) {
     f32 barH = tabBarHeight();
+    bool scrolling = needsScroll();
+    f32 leftArrowW = scrolling ? scrollArrowWidth() : 0.0f;
+    f32 rightArrowX = bounds().width - (scrolling ? scrollArrowWidth() : 0.0f);
 
     switch (event.type) {
         case MouseEventType::ButtonDown: {
             if (event.button == MouseButton::Left && event.position.y < barH) {
+                // Check arrow buttons
+                if (scrolling && event.position.x < leftArrowW) {
+                    // Scroll left
+                    f32 step = 80.0f;
+                    m_tabScrollOffset = std::max(0.0f, m_tabScrollOffset - step);
+                    invalidateRender();
+                    return true;
+                }
+                if (scrolling && event.position.x >= rightArrowX) {
+                    // Scroll right
+                    f32 maxOff = totalTabsWidth() - scrollableRegionWidth();
+                    f32 step = 80.0f;
+                    m_tabScrollOffset = std::min(maxOff, m_tabScrollOffset + step);
+                    invalidateRender();
+                    return true;
+                }
+
                 isize idx = tabIndexAtX(event.position.x);
                 if (idx >= 0) {
                     selectTab(idx);
@@ -20079,14 +20470,27 @@ bool TabControl::onMouseEvent(const MouseEvent& event) {
         }
         case MouseEventType::Move: {
             if (event.position.y < barH) {
+                // Track arrow hover
+                bool leftHov = scrolling && event.position.x < leftArrowW;
+                bool rightHov = scrolling && event.position.x >= rightArrowX;
+                if (leftHov != m_leftArrowHovered || rightHov != m_rightArrowHovered) {
+                    m_leftArrowHovered = leftHov;
+                    m_rightArrowHovered = rightHov;
+                    invalidateRender();
+                }
+
                 isize idx = tabIndexAtX(event.position.x);
                 if (idx != m_hoveredTab) {
                     m_hoveredTab = idx;
                     invalidateRender();
                 }
-            } else if (m_hoveredTab != -1) {
-                m_hoveredTab = -1;
-                invalidateRender();
+            } else {
+                if (m_hoveredTab != -1 || m_leftArrowHovered || m_rightArrowHovered) {
+                    m_hoveredTab = -1;
+                    m_leftArrowHovered = false;
+                    m_rightArrowHovered = false;
+                    invalidateRender();
+                }
             }
             break;
         }
@@ -20974,6 +21378,369 @@ bool Dialog::onKeyEvent(const KeyEvent& event) {
     }
 
     return true; // consume all keys while modal
+}
+
+} // namespace gut
+
+
+// === Tooltip implementation ===================================================
+
+#include <unordered_map>
+
+namespace gut {
+
+// Internal state for the tooltip system
+namespace {
+
+struct TooltipState {
+    // Map from element raw pointer to tooltip text
+    std::unordered_map<Element*, String> tooltipTexts;
+    // Map from element raw pointer to custom delay (0 = use global default)
+    std::unordered_map<Element*, f32> tooltipDelays;
+
+    // Currently showing tooltip for this element (nullptr if none)
+    Element* activeElement{nullptr};
+    // Position where the tooltip should appear (screen coords)
+    f32 tipX{0.0f};
+    f32 tipY{0.0f};
+    // The context that owns the overlay
+    Context* overlayContext{nullptr};
+    // A dummy element used as overlay owner
+    Ref<Element> overlayOwner;
+};
+
+TooltipState& tooltipState() {
+    static TooltipState s;
+    return s;
+}
+
+} // anonymous namespace
+
+Tooltip::Style& Tooltip::style() {
+    static Style s;
+    return s;
+}
+
+void Tooltip::set(Ref<Element> element, String text) {
+    set(std::move(element), std::move(text), 0.0f);
+}
+
+void Tooltip::set(Ref<Element> element, String text, f32 /*delayMs*/) {
+    if (!element) return;
+
+    auto& state = tooltipState();
+    Element* raw = element.get();
+
+    if (text.empty()) {
+        // Remove tooltip
+        state.tooltipTexts.erase(raw);
+        state.tooltipDelays.erase(raw);
+        if (state.activeElement == raw) {
+            // Hide if showing
+            if (state.overlayContext && state.overlayOwner) {
+                state.overlayContext->removeOverlay(state.overlayOwner.get());
+            }
+            state.activeElement = nullptr;
+            state.overlayContext = nullptr;
+        }
+        return;
+    }
+
+    state.tooltipTexts[raw] = text;
+
+    // Connect mouseEntered / mouseLeft signals (only connect once)
+    // We use a weak pattern: check if text exists in map
+    element->mouseEntered().connect([raw]() {
+        auto& st = tooltipState();
+        auto it = st.tooltipTexts.find(raw);
+        if (it == st.tooltipTexts.end()) return;
+        if (!raw->context()) return;
+
+        // Get mouse position from the input manager
+        Point2f mp = raw->context()->inputManager().mousePosition();
+        const auto& sty = Tooltip::style();
+
+        // Position tooltip below cursor
+        st.tipX = mp.x;
+        st.tipY = mp.y + sty.offsetY;
+        st.activeElement = raw;
+        st.overlayContext = raw->context();
+
+        if (!st.overlayOwner) {
+            st.overlayOwner = make<Panel>();
+        }
+
+        st.overlayContext->addOverlay(st.overlayOwner.get(), [&st, raw](RenderContext& ctx) {
+            auto it2 = st.tooltipTexts.find(raw);
+            if (it2 == st.tooltipTexts.end() || st.activeElement != raw) return;
+
+            const auto& sty2 = Tooltip::style();
+            const String& tipText = it2->second;
+
+            // Measure text
+            Font* font = nullptr;
+            Ref<FontFace> face;
+            // We need access to the context's default font
+            if (st.overlayContext) {
+                font = st.overlayContext->defaultFont();
+                if (font) face = font->getFace(sty2.fontSize);
+            }
+            if (!face) return;
+
+            f32 textW = face->measureWidth(tipText);
+            f32 textH = face->lineHeight();
+            f32 boxW = textW + sty2.paddingH * 2.0f;
+            f32 boxH = textH + sty2.paddingV * 2.0f;
+
+            // Clamp within frame
+            Size2f frame = ctx.frameSize();
+            f32 bx = st.tipX - boxW * 0.5f; // center horizontally on cursor
+            f32 by = st.tipY;
+            if (bx < 4.0f) bx = 4.0f;
+            if (bx + boxW > frame.width - 4.0f) bx = frame.width - 4.0f - boxW;
+            if (by + boxH > frame.height - 4.0f) {
+                // Show above cursor instead
+                by = st.tipY - sty2.offsetY - boxH - 4.0f;
+            }
+
+            // Background
+            ctx.fillRoundedRect({bx, by, boxW, boxH}, sty2.cornerRadius, sty2.background);
+            ctx.strokeRoundedRect({bx, by, boxW, boxH}, sty2.cornerRadius, sty2.borderColor, 1.0f);
+
+            // Text
+            f32 tx = bx + sty2.paddingH;
+            f32 ty = by + sty2.paddingV + face->ascender();
+            ctx.drawText(face.get(), tipText, {tx, ty}, sty2.foreground);
+        });
+    });
+
+    element->mouseLeft().connect([raw]() {
+        auto& st = tooltipState();
+        if (st.activeElement == raw && st.overlayContext && st.overlayOwner) {
+            st.overlayContext->removeOverlay(st.overlayOwner.get());
+            st.activeElement = nullptr;
+            st.overlayContext = nullptr;
+        }
+    });
+}
+
+} // namespace gut
+
+
+// === ContextMenu implementation ==============================================
+
+namespace gut {
+
+ContextMenu::ContextMenu() = default;
+
+void ContextMenu::addItem(String label, std::function<void()> action, bool enabled) {
+    m_items.push_back({std::move(label), std::move(action), false, enabled});
+}
+
+void ContextMenu::addSeparator() {
+    m_items.push_back({"", nullptr, true, false});
+}
+
+void ContextMenu::clearItems() {
+    m_items.clear();
+}
+
+void ContextMenu::attachTo(Ref<Element> element) {
+    if (!element) return;
+    // The user should call showAt() from their own right-click handler.
+    // This method is a convenience placeholder for future event-filter support.
+    // For now, it's a no-op — users wire up right-click manually in their code.
+}
+
+void ContextMenu::showAt(f32 x, f32 y) {
+    if (!context()) return;
+    m_popupX = x;
+    m_popupY = y;
+    m_isOpen = true;
+    m_hoveredItemIndex = -1;
+
+    context()->inputManager().captureMouse(this);
+    context()->addOverlay(this, [this](RenderContext& ctx) {
+        renderPopupOverlay(ctx);
+    });
+    invalidateRender();
+}
+
+void ContextMenu::close() {
+    if (!m_isOpen) return;
+    m_isOpen = false;
+
+    if (context()) {
+        context()->inputManager().releaseMouse();
+        context()->removeOverlay(this);
+    }
+
+    if (m_onClosed) m_onClosed();
+    invalidateRender();
+}
+
+f32 ContextMenu::totalMenuHeight() const {
+    f32 h = 0;
+    for (const auto& item : m_items) {
+        h += item.separator ? separatorHeight() + 6.0f : itemHeight();
+    }
+    return h;
+}
+
+isize ContextMenu::itemIndexAtY(f32 localY) const {
+    f32 y = 0;
+    for (isize i = 0; i < static_cast<isize>(m_items.size()); ++i) {
+        const auto& item = m_items[static_cast<usize>(i)];
+        f32 ih = item.separator ? separatorHeight() + 6.0f : itemHeight();
+        if (localY >= y && localY < y + ih) {
+            return item.separator ? -1 : i;
+        }
+        y += ih;
+    }
+    return -1;
+}
+
+Size2f ContextMenu::measureOverride(Size2f /*availableSize*/) {
+    return {menuWidth(), totalMenuHeight()};
+}
+
+void ContextMenu::onRender(RenderContext& /*ctx*/) {
+    // Rendering is done via the overlay
+}
+
+void ContextMenu::renderPopupOverlay(RenderContext& ctx) {
+    f32 mw = menuWidth();
+    f32 mh = totalMenuHeight();
+    f32 pad = 4.0f; // vertical padding inside menu
+    f32 totalH = mh + pad * 2.0f;
+
+    // Clamp position within frame
+    Size2f frame = ctx.frameSize();
+    f32 mx = m_popupX;
+    f32 my = m_popupY;
+    if (mx + mw > frame.width - 4.0f) mx = frame.width - 4.0f - mw;
+    if (my + totalH > frame.height - 4.0f) my = frame.height - 4.0f - totalH;
+    if (mx < 4.0f) mx = 4.0f;
+    if (my < 4.0f) my = 4.0f;
+
+    // Store adjusted position for hit testing
+    m_popupX = mx;
+    m_popupY = my;
+
+    // Shadow
+    ctx.fillRoundedRect({mx + 3.0f, my + 3.0f, mw, totalH}, cornerRadius(), Color::fromRgba8(0, 0, 0, 80));
+
+    // Background
+    ctx.fillRoundedRect({mx, my, mw, totalH}, cornerRadius(), menuBackground());
+    ctx.strokeRoundedRect({mx, my, mw, totalH}, cornerRadius(), menuBorderColor(), 1.0f);
+
+    // Items
+    Font* font = context() ? context()->defaultFont() : nullptr;
+    Ref<FontFace> face;
+    if (font) face = font->getFace(fontSize());
+
+    f32 iy = my + pad;
+    for (isize i = 0; i < static_cast<isize>(m_items.size()); ++i) {
+        const auto& item = m_items[static_cast<usize>(i)];
+
+        if (item.separator) {
+            f32 sepY = iy + 3.0f;
+            ctx.fillRect({mx + 8.0f, sepY, mw - 16.0f, separatorHeight()}, separatorColor());
+            iy += separatorHeight() + 6.0f;
+            continue;
+        }
+
+        f32 ih = itemHeight();
+
+        // Hover highlight
+        bool hovered = (i == m_hoveredItemIndex && item.enabled);
+        if (hovered) {
+            f32 hlPad = 4.0f;
+            ctx.fillRoundedRect({mx + hlPad, iy, mw - hlPad * 2.0f, ih}, 4.0f, itemHoverBackground());
+        }
+
+        // Text
+        if (face) {
+            Color fg;
+            if (!item.enabled) fg = disabledForeground();
+            else if (hovered) fg = itemHoverForeground();
+            else fg = itemForeground();
+
+            f32 tx = mx + 12.0f;
+            f32 ty = iy + (ih - face->lineHeight()) * 0.5f + face->ascender();
+            ctx.drawText(face.get(), item.label, {tx, ty}, fg);
+        }
+
+        iy += ih;
+    }
+}
+
+bool ContextMenu::onMouseEvent(const MouseEvent& event) {
+    if (!m_isOpen) return false;
+
+    // Convert to screen coordinates
+    Rectf sb = screenBounds();
+    f32 sx = sb.x + event.position.x;
+    f32 sy = sb.y + event.position.y;
+
+    f32 pad = 4.0f;
+    f32 mw = menuWidth();
+    f32 mh = totalMenuHeight() + pad * 2.0f;
+
+    bool inside = (sx >= m_popupX && sx < m_popupX + mw &&
+                   sy >= m_popupY && sy < m_popupY + mh);
+
+    switch (event.type) {
+        case MouseEventType::ButtonDown: {
+            if (!inside) {
+                close();
+                return true;
+            }
+            if (event.button == MouseButton::Left) {
+                f32 localY = sy - m_popupY - pad;
+                isize idx = itemIndexAtY(localY);
+                if (idx >= 0) {
+                    const auto& item = m_items[static_cast<usize>(idx)];
+                    if (item.enabled && item.action) {
+                        close();
+                        item.action();
+                        return true;
+                    }
+                }
+            }
+            return true;
+        }
+        case MouseEventType::Move: {
+            if (inside) {
+                f32 localY = sy - m_popupY - pad;
+                isize idx = itemIndexAtY(localY);
+                if (idx != m_hoveredItemIndex) {
+                    m_hoveredItemIndex = idx;
+                    invalidateRender();
+                }
+            } else {
+                if (m_hoveredItemIndex != -1) {
+                    m_hoveredItemIndex = -1;
+                    invalidateRender();
+                }
+            }
+            return true;
+        }
+        default:
+            return true; // consume all mouse events while open
+    }
+}
+
+bool ContextMenu::onKeyEvent(const KeyEvent& event) {
+    if (!m_isOpen) return false;
+    if (event.type != KeyEventType::KeyDown) return true;
+
+    if (event.key == Key::Escape) {
+        close();
+        return true;
+    }
+
+    return true; // consume all keys while open
 }
 
 } // namespace gut

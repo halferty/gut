@@ -179,6 +179,57 @@ TEST(text_content) {
     ASSERT_EQ(text->text(), "Hello");
 }
 
+TEST(text_shadow_properties) {
+    auto t = gut::make<gut::Text>("Shadow");
+    // Defaults
+    ASSERT(t->textShadowColor().a == 0.0f);
+    ASSERT(t->textShadowOffsetX() == 2.0f);
+    ASSERT(t->textShadowOffsetY() == 2.0f);
+    ASSERT(t->textShadowBlurRadius() == 0.0f);
+    // Set
+    t->settextShadowColor(gut::Color::fromRgba8(0, 0, 0, 128));
+    t->settextShadowOffsetX(3.0f);
+    t->settextShadowOffsetY(4.0f);
+    t->settextShadowBlurRadius(5.0f);
+    ASSERT(t->textShadowColor().a > 0.4f);
+    ASSERT(t->textShadowOffsetX() == 3.0f);
+    ASSERT(t->textShadowOffsetY() == 4.0f);
+    ASSERT(t->textShadowBlurRadius() == 5.0f);
+}
+
+TEST(text_stroke_properties) {
+    auto t = gut::make<gut::Text>("Stroke");
+    ASSERT(t->textStrokeColor().a == 0.0f);
+    ASSERT(t->textStrokeWidth() == 1.0f);
+    t->settextStrokeColor(gut::Color::fromRgba8(255, 0, 0, 255));
+    t->settextStrokeWidth(2.5f);
+    ASSERT(t->textStrokeColor().r == 1.0f);
+    ASSERT(t->textStrokeWidth() == 2.5f);
+}
+
+TEST(text_glow_properties) {
+    auto t = gut::make<gut::Text>("Glow");
+    ASSERT(t->textGlowColor().a == 0.0f);
+    ASSERT(t->textGlowRadius() == 4.0f);
+    t->settextGlowColor(gut::Color::fromRgba8(0, 200, 255, 100));
+    t->settextGlowRadius(8.0f);
+    ASSERT(t->textGlowColor().g > 0.7f);
+    ASSERT(t->textGlowRadius() == 8.0f);
+}
+
+TEST(text_effects_combined) {
+    auto t = gut::make<gut::Text>("All");
+    t->settextShadowColor(gut::Color::fromRgba8(0, 0, 0, 180));
+    t->settextStrokeColor(gut::Color::fromRgba8(40, 40, 60, 255));
+    t->settextStrokeWidth(1.5f);
+    t->settextGlowColor(gut::Color::fromRgba8(100, 180, 255, 80));
+    t->settextGlowRadius(4.0f);
+    // All three effects set simultaneously
+    ASSERT(t->textShadowColor().a > 0);
+    ASSERT(t->textStrokeColor().a > 0);
+    ASSERT(t->textGlowColor().a > 0);
+}
+
 // =============================================================================
 // Button Tests
 // =============================================================================
@@ -606,6 +657,10 @@ int main() {
     
     // Text
     RUN_TEST(text_content);
+    RUN_TEST(text_shadow_properties);
+    RUN_TEST(text_stroke_properties);
+    RUN_TEST(text_glow_properties);
+    RUN_TEST(text_effects_combined);
     
     // Button
     RUN_TEST(button_create);
