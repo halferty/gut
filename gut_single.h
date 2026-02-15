@@ -4051,6 +4051,7 @@ protected:
     friend class FocusManager;
     friend class Tooltip;
     friend class ContextMenu;
+    friend class ListView;
 
     /// Get the owning context (set when element is added to a rooted tree)
     Context* context() const { return m_context; }
@@ -5711,6 +5712,161 @@ private:
 } // namespace gut
 
 
+// --- gut/elements/ListView.h ---
+
+#include <functional>
+#include <set>
+
+namespace gut {
+
+/**
+ * @brief Selection behaviour for ListView.
+ */
+enum class SelectionMode : u8 {
+    None,       ///< No selection allowed
+    Single,     ///< Exactly one item at a time
+    Multiple,   ///< Ctrl+click to toggle individual items
+    Extended    ///< Shift+click ranges + Ctrl+click toggle (like a file manager)
+};
+
+/**
+ * @brief A virtualised, scrollable list of items.
+ *
+ * Provide an item count and a factory function that builds an element for a
+ * given index.  ListView renders only the visible rows, supports keyboard
+ * navigation (Up / Down / Home / End / PageUp / PageDown) and several
+ * selection modes.
+ *
+ * Usage:
+ *     auto list = make<ListView>();
+ *     list->setItemCount(1000);
+ *     list->setItemTemplate([](isize index) {
+ *         auto t = make<Text>("Item #" + std::to_string(index), 12.0f);
+ *         t->setforeground(Color::white());
+ *         return Ref<Element>(t);
+ *     });
+ *     list->setOnSelectionChanged([](const std::set<isize>& sel) { ... });
+ */
+class GUT_API ListView : public Element {
+    GUT_OBJECT(ListView, Element)
+
+public:
+    ListView();
+    ~ListView() override = default;
+
+    // -------------------------------------------------------------------------
+    // Data
+    // -------------------------------------------------------------------------
+
+    /// Set the total number of items (re-measures; clears selection).
+    void setItemCount(isize count);
+    isize itemCount() const { return m_itemCount; }
+
+    /// Factory called for each visible row.  Receives the item index, returns
+    /// a freshly-configured element (or a recycled one — caller's choice).
+    using ItemTemplate = std::function<Ref<Element>(isize index)>;
+    void setItemTemplate(ItemTemplate tmpl) { m_itemTemplate = std::move(tmpl); }
+
+    /// Force a refresh of all visible items (call after mutating data).
+    void refresh();
+
+    // -------------------------------------------------------------------------
+    // Selection
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(SelectionMode, selectionMode, SelectionMode::Single)
+
+    /// Currently selected indices (may be >1 in Multiple / Extended mode).
+    const std::set<isize>& selectedIndices() const { return m_selectedIndices; }
+
+    /// Convenience: first selected index (-1 when empty).
+    isize selectedIndex() const;
+
+    /// Programmatic selection.
+    void selectIndex(isize index);
+    void deselectAll();
+    void selectRange(isize from, isize to);   // inclusive
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, itemHeight, 28.0f)
+    GUT_PROPERTY(f32, fontSize, 12.0f)        // only used if no template
+
+    // Colours — body
+    GUT_PROPERTY(Color, listBackground, Color::fromHex(0x1E1E2A))
+    GUT_PROPERTY(Color, itemBackground, Color::transparent())
+    GUT_PROPERTY(Color, itemAlternateBackground, Color::fromRgba8(35, 35, 50, 255))
+    GUT_PROPERTY(Color, itemHoverBackground, Color::fromRgba8(50, 50, 68, 255))
+    GUT_PROPERTY(Color, itemSelectedBackground, Color::fromRgba8(50, 100, 200, 255))
+    GUT_PROPERTY(Color, itemForeground, Color::fromHex(0xD0D0E0))
+    GUT_PROPERTY(Color, dividerColor, Color::fromRgba8(50, 50, 62, 100))
+
+    // Colours — scrollbar
+    GUT_PROPERTY(Color, scrollbarTrackColor, Color::fromRgba8(40, 40, 55, 80))
+    GUT_PROPERTY(Color, scrollbarThumbColor, Color::fromRgba8(100, 100, 120, 160))
+
+    // -------------------------------------------------------------------------
+    // Callbacks
+    // -------------------------------------------------------------------------
+
+    /// Fired after any selection change.
+    void setOnSelectionChanged(std::function<void(const std::set<isize>&)> cb) {
+        m_onSelectionChanged = std::move(cb);
+    }
+
+    /// Fired on double-click of an item.
+    void setOnItemDoubleClicked(std::function<void(isize)> cb) {
+        m_onItemDoubleClicked = std::move(cb);
+    }
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+
+private:
+    // Geometry helpers
+    f32 totalHeight() const { return static_cast<f32>(m_itemCount) * itemHeight(); }
+    f32 viewHeight() const { return bounds().height; }
+    f32 maxScrollOffset() const { return std::max(0.0f, totalHeight() - viewHeight()); }
+    bool needsScrollbar() const { return totalHeight() > viewHeight(); }
+    isize itemIndexAtY(f32 localY) const;
+
+    static constexpr f32 kScrollbarWidth = 8.0f;
+    Rectf scrollbarThumbRect() const;
+
+    void ensureVisible(isize index);
+    void notifySelectionChanged();
+
+    // Data
+    isize m_itemCount{0};
+    ItemTemplate m_itemTemplate;
+
+    // Selection
+    std::set<isize> m_selectedIndices;
+    isize m_anchorIndex{-1};   // anchor for shift-click ranges
+
+    // Scroll
+    f32 m_scrollOffset{0.0f};
+    isize m_hoveredItem{-1};
+
+    // Scrollbar drag state
+    bool m_draggingThumb{false};
+    f32 m_dragStartY{0.0f};
+    f32 m_dragStartScroll{0.0f};
+
+    std::function<void(const std::set<isize>&)> m_onSelectionChanged;
+    std::function<void(isize)> m_onItemDoubleClicked;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/Dialog.h ---
 
 #include <functional>
@@ -6035,6 +6191,69 @@ private:
     void renderPopupOverlay(RenderContext& ctx);
     f32 totalMenuHeight() const;
     isize itemIndexAtY(f32 localY) const;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/Toast.h ---
+
+namespace gut {
+
+/**
+ * @brief Screen position for Toast notifications.
+ */
+enum class ToastPosition : u8 {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight
+};
+
+/**
+ * @brief A lightweight, auto-dismissing notification overlay.
+ *
+ * Toast notifications appear at a configurable screen position and
+ * automatically disappear after a timeout.  Multiple toasts stack
+ * vertically.
+ *
+ * Usage:
+ *     Toast::show(context, "Connection lost", ToastPosition::BottomRight);
+ *     Toast::show(context, "Saved!", ToastPosition::TopCenter, 2.0f);
+ */
+class GUT_API Toast {
+public:
+    /// Show a toast.  durationSec <= 0 means use the global default.
+    static void show(Context* ctx, String message,
+                     ToastPosition position = ToastPosition::BottomRight,
+                     f32 durationSec = 0.0f);
+
+    /// Dismiss all visible toasts immediately.
+    static void dismissAll(Context* ctx);
+
+    // -------------------------------------------------------------------------
+    // Global appearance configuration
+    // -------------------------------------------------------------------------
+    struct Style {
+        Color background{Color::fromRgba8(40, 40, 55, 230)};
+        Color foreground{Color::fromRgba8(220, 220, 240, 255)};
+        Color borderColor{Color::fromRgba8(80, 80, 100, 180)};
+        f32 fontSize{12.0f};
+        f32 cornerRadius{6.0f};
+        f32 paddingH{14.0f};
+        f32 paddingV{10.0f};
+        f32 maxWidth{320.0f};
+        f32 margin{12.0f};         // distance from screen edge
+        f32 spacing{8.0f};         // gap between stacked toasts
+        f32 defaultDuration{3.0f}; // seconds
+    };
+
+    static Style& style();
+
+private:
+    Toast() = default;
 };
 
 } // namespace gut
@@ -20957,6 +21176,456 @@ void Table::onMouseLeave() {
 } // namespace gut
 
 
+// === elements/ListView.cpp ===================================================
+
+#include <algorithm>
+#include <cmath>
+
+namespace gut {
+
+ListView::ListView() {
+    setfocusable(true);
+    setcursor(CursorType::Arrow);
+}
+
+// ---- Data -------------------------------------------------------------------
+
+void ListView::setItemCount(isize count) {
+    m_itemCount = std::max<isize>(0, count);
+    m_selectedIndices.clear();
+    m_anchorIndex = -1;
+    m_hoveredItem = -1;
+    m_scrollOffset = std::clamp(m_scrollOffset, 0.0f, maxScrollOffset());
+    invalidateLayout();
+    invalidateRender();
+}
+
+void ListView::refresh() {
+    m_scrollOffset = std::clamp(m_scrollOffset, 0.0f, maxScrollOffset());
+    invalidateRender();
+}
+
+// ---- Selection --------------------------------------------------------------
+
+isize ListView::selectedIndex() const {
+    return m_selectedIndices.empty() ? -1 : *m_selectedIndices.begin();
+}
+
+void ListView::selectIndex(isize index) {
+    if (selectionMode() == SelectionMode::None) return;
+    if (index < 0 || index >= m_itemCount) return;
+    m_selectedIndices.clear();
+    m_selectedIndices.insert(index);
+    m_anchorIndex = index;
+    ensureVisible(index);
+    notifySelectionChanged();
+    invalidateRender();
+}
+
+void ListView::deselectAll() {
+    if (m_selectedIndices.empty()) return;
+    m_selectedIndices.clear();
+    notifySelectionChanged();
+    invalidateRender();
+}
+
+void ListView::selectRange(isize from, isize to) {
+    if (selectionMode() == SelectionMode::None) return;
+    isize lo = std::max<isize>(0, std::min(from, to));
+    isize hi = std::min(m_itemCount - 1, std::max(from, to));
+    for (isize i = lo; i <= hi; ++i) m_selectedIndices.insert(i);
+    notifySelectionChanged();
+    invalidateRender();
+}
+
+void ListView::notifySelectionChanged() {
+    if (m_onSelectionChanged) m_onSelectionChanged(m_selectedIndices);
+}
+
+void ListView::ensureVisible(isize index) {
+    if (index < 0 || index >= m_itemCount) return;
+    f32 itemTop = static_cast<f32>(index) * itemHeight();
+    f32 itemBot = itemTop + itemHeight();
+    if (itemTop < m_scrollOffset) {
+        m_scrollOffset = itemTop;
+    } else if (itemBot > m_scrollOffset + viewHeight()) {
+        m_scrollOffset = itemBot - viewHeight();
+    }
+    m_scrollOffset = std::clamp(m_scrollOffset, 0.0f, maxScrollOffset());
+}
+
+// ---- Geometry ---------------------------------------------------------------
+
+isize ListView::itemIndexAtY(f32 localY) const {
+    if (localY < 0) return -1;
+    f32 yInContent = localY + m_scrollOffset;
+    isize idx = static_cast<isize>(yInContent / itemHeight());
+    if (idx < 0 || idx >= m_itemCount) return -1;
+    return idx;
+}
+
+Rectf ListView::scrollbarThumbRect() const {
+    f32 bw = bounds().width;
+    f32 bh = viewHeight();
+    f32 sbX = bw - kScrollbarWidth;
+    f32 viewR = bh / totalHeight();
+    f32 thumbH = std::max(20.0f, bh * viewR);
+    f32 scrollMax = maxScrollOffset();
+    f32 scrollR = (scrollMax > 0) ? m_scrollOffset / scrollMax : 0.0f;
+    f32 thumbY = scrollR * (bh - thumbH);
+    return {sbX, thumbY, kScrollbarWidth, thumbH};
+}
+
+// ---- Layout -----------------------------------------------------------------
+
+Size2f ListView::measureOverride(Size2f /*availableSize*/) {
+    f32 w = (width() == width()) ? width() : 200.0f;
+    f32 h = (height() == height()) ? height() : totalHeight();
+    return {w, h};
+}
+
+// ---- Render -----------------------------------------------------------------
+
+void ListView::onRender(RenderContext& ctx) {
+    f32 bw = bounds().width;
+    f32 bh = bounds().height;
+    bool scroll = needsScrollbar();
+    f32 contentW = scroll ? bw - kScrollbarWidth : bw;
+
+    // Background
+    ctx.fillRect({0, 0, bw, bh}, listBackground());
+
+    // Determine visible range
+    f32 ih = itemHeight();
+    isize firstVisible = static_cast<isize>(m_scrollOffset / ih);
+    isize lastVisible  = static_cast<isize>((m_scrollOffset + bh) / ih);
+    lastVisible = std::min(lastVisible, m_itemCount - 1);
+
+    Font* font = context() ? context()->defaultFont() : nullptr;
+    Ref<FontFace> face;
+    if (font) face = font->getFace(fontSize());
+
+    ctx.save();
+    ctx.pushClip({0, 0, contentW, bh});
+
+    for (isize i = firstVisible; i <= lastVisible; ++i) {
+        f32 ry = static_cast<f32>(i) * ih - m_scrollOffset;
+
+        // Row background  —  alt / hover / selected
+        bool isSelected = m_selectedIndices.count(i) > 0;
+        Color bg = (i % 2 == 0) ? itemBackground() : itemAlternateBackground();
+        if (i == m_hoveredItem && !isSelected) bg = itemHoverBackground();
+        if (isSelected) bg = itemSelectedBackground();
+        if (bg.a > 0.0f) {
+            ctx.fillRect({0, ry, contentW, ih}, bg);
+        }
+
+        // Item content — use template if provided, else fall back to plain index text
+        if (m_itemTemplate) {
+            Ref<Element> elem = m_itemTemplate(i);
+            if (elem) {
+                // Measure and arrange inside the row rect
+                elem->measure({contentW, ih});
+                elem->arrange({0, ry, contentW, ih});
+                // Provide context so it can render fonts etc.
+                if (!elem->context() && context()) elem->setContext(context());
+                elem->render(ctx);
+            }
+        } else if (face) {
+            // Default: render "Item N"
+            String label = "Item " + std::to_string(i);
+            Color fg = itemForeground();
+            f32 tx = 10.0f;
+            f32 ty = ry + (ih - face->lineHeight()) * 0.5f + face->ascender();
+            ctx.drawText(face.get(), label, {tx, ty}, fg);
+        }
+
+        // Divider
+        if (dividerColor().a > 0) {
+            ctx.fillRect({0, ry + ih - 1.0f, contentW, 1.0f}, dividerColor());
+        }
+    }
+
+    ctx.popClip();
+    ctx.restore();
+
+    // ---- Scrollbar ----
+    if (scroll) {
+        Rectf thumb = scrollbarThumbRect();
+        ctx.fillRect({bw - kScrollbarWidth, 0, kScrollbarWidth, bh}, scrollbarTrackColor());
+        ctx.fillRoundedRect(thumb, kScrollbarWidth * 0.5f, scrollbarThumbColor());
+    }
+}
+
+// ---- Mouse ------------------------------------------------------------------
+
+bool ListView::onMouseEvent(const MouseEvent& event) {
+    if (!isEnabled()) return false;
+
+    switch (event.type) {
+        case MouseEventType::ButtonDown: {
+            if (event.button != MouseButton::Left) break;
+
+            // Scrollbar thumb grab
+            if (needsScrollbar()) {
+                Rectf thumb = scrollbarThumbRect();
+                if (event.position.x >= thumb.x && event.position.x < thumb.x + thumb.width &&
+                    event.position.y >= thumb.y && event.position.y < thumb.y + thumb.height) {
+                    m_draggingThumb = true;
+                    m_dragStartY = event.position.y;
+                    m_dragStartScroll = m_scrollOffset;
+                    if (context()) context()->inputManager().captureMouse(this);
+                    return true;
+                }
+                // Click in scrollbar track → jump
+                f32 sbX = bounds().width - kScrollbarWidth;
+                if (event.position.x >= sbX) {
+                    f32 bH = viewHeight();
+                    f32 viewR = bH / totalHeight();
+                    f32 thumbH = std::max(20.0f, bH * viewR);
+                    f32 clickR = (event.position.y - thumbH * 0.5f) / (bH - thumbH);
+                    clickR = std::clamp(clickR, 0.0f, 1.0f);
+                    m_scrollOffset = clickR * maxScrollOffset();
+                    invalidateRender();
+                    return true;
+                }
+            }
+
+            // Item click — selection logic
+            isize idx = itemIndexAtY(event.position.y);
+            if (idx >= 0 && selectionMode() != SelectionMode::None) {
+                bool ctrl  = event.hasControl();
+                bool shift = event.hasShift();
+
+                switch (selectionMode()) {
+                    case SelectionMode::Single:
+                        m_selectedIndices.clear();
+                        m_selectedIndices.insert(idx);
+                        m_anchorIndex = idx;
+                        break;
+
+                    case SelectionMode::Multiple:
+                        // Toggle with or without Ctrl
+                        if (m_selectedIndices.count(idx)) {
+                            m_selectedIndices.erase(idx);
+                        } else {
+                            m_selectedIndices.insert(idx);
+                        }
+                        m_anchorIndex = idx;
+                        break;
+
+                    case SelectionMode::Extended:
+                        if (shift && m_anchorIndex >= 0) {
+                            // Range from anchor to idx
+                            if (!ctrl) m_selectedIndices.clear();
+                            isize lo = std::min(m_anchorIndex, idx);
+                            isize hi = std::max(m_anchorIndex, idx);
+                            for (isize j = lo; j <= hi; ++j) m_selectedIndices.insert(j);
+                        } else if (ctrl) {
+                            // Toggle single
+                            if (m_selectedIndices.count(idx)) {
+                                m_selectedIndices.erase(idx);
+                            } else {
+                                m_selectedIndices.insert(idx);
+                            }
+                            m_anchorIndex = idx;
+                        } else {
+                            // Plain click — single select
+                            m_selectedIndices.clear();
+                            m_selectedIndices.insert(idx);
+                            m_anchorIndex = idx;
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
+
+                ensureVisible(idx);
+                notifySelectionChanged();
+                invalidateRender();
+                return true;
+            }
+            break;
+        }
+
+        case MouseEventType::ButtonUp: {
+            if (event.button == MouseButton::Left && m_draggingThumb) {
+                m_draggingThumb = false;
+                if (context()) context()->inputManager().releaseMouse();
+                return true;
+            }
+            break;
+        }
+
+        case MouseEventType::DoubleClick: {
+            isize idx = itemIndexAtY(event.position.y);
+            if (idx >= 0 && m_onItemDoubleClicked) {
+                m_onItemDoubleClicked(idx);
+                return true;
+            }
+            break;
+        }
+
+        case MouseEventType::Move: {
+            if (m_draggingThumb) {
+                f32 bH = viewHeight();
+                f32 viewR = bH / totalHeight();
+                f32 thumbH = std::max(20.0f, bH * viewR);
+                f32 trackRange = bH - thumbH;
+                if (trackRange > 0) {
+                    f32 dy = event.position.y - m_dragStartY;
+                    f32 scrollDelta = (dy / trackRange) * maxScrollOffset();
+                    m_scrollOffset = std::clamp(m_dragStartScroll + scrollDelta, 0.0f, maxScrollOffset());
+                    invalidateRender();
+                }
+                return true;
+            }
+
+            isize idx = itemIndexAtY(event.position.y);
+            if (idx != m_hoveredItem) {
+                m_hoveredItem = idx;
+                invalidateRender();
+            }
+            break;
+        }
+
+        case MouseEventType::Wheel: {
+            if (!needsScrollbar()) break;
+            m_scrollOffset -= event.delta.y;
+            m_scrollOffset = std::clamp(m_scrollOffset, 0.0f, maxScrollOffset());
+            invalidateRender();
+            return true;
+        }
+
+        default:
+            break;
+    }
+    return false;
+}
+
+// ---- Keyboard ---------------------------------------------------------------
+
+bool ListView::onKeyEvent(const KeyEvent& event) {
+    if (event.type != KeyEventType::KeyDown) return false;
+    if (m_itemCount == 0 || selectionMode() == SelectionMode::None) return false;
+
+    // For keyboard nav we always work with a single "cursor" index
+    isize cur = selectedIndex();
+
+    switch (event.key) {
+        case Key::Up: {
+            isize next = std::max<isize>(0, cur - 1);
+            if (event.hasShift() && selectionMode() == SelectionMode::Extended && m_anchorIndex >= 0) {
+                m_selectedIndices.clear();
+                isize lo = std::min(m_anchorIndex, next);
+                isize hi = std::max(m_anchorIndex, next);
+                for (isize j = lo; j <= hi; ++j) m_selectedIndices.insert(j);
+            } else {
+                m_selectedIndices.clear();
+                m_selectedIndices.insert(next);
+                m_anchorIndex = next;
+            }
+            ensureVisible(next);
+            notifySelectionChanged();
+            invalidateRender();
+            return true;
+        }
+        case Key::Down: {
+            isize next = std::min(m_itemCount - 1, cur + 1);
+            if (event.hasShift() && selectionMode() == SelectionMode::Extended && m_anchorIndex >= 0) {
+                m_selectedIndices.clear();
+                isize lo = std::min(m_anchorIndex, next);
+                isize hi = std::max(m_anchorIndex, next);
+                for (isize j = lo; j <= hi; ++j) m_selectedIndices.insert(j);
+            } else {
+                m_selectedIndices.clear();
+                m_selectedIndices.insert(next);
+                m_anchorIndex = next;
+            }
+            ensureVisible(next);
+            notifySelectionChanged();
+            invalidateRender();
+            return true;
+        }
+        case Key::Home: {
+            m_selectedIndices.clear();
+            m_selectedIndices.insert(static_cast<isize>(0));
+            m_anchorIndex = 0;
+            m_scrollOffset = 0;
+            notifySelectionChanged();
+            invalidateRender();
+            return true;
+        }
+        case Key::End: {
+            isize last = m_itemCount - 1;
+            m_selectedIndices.clear();
+            m_selectedIndices.insert(last);
+            m_anchorIndex = last;
+            m_scrollOffset = maxScrollOffset();
+            notifySelectionChanged();
+            invalidateRender();
+            return true;
+        }
+        case Key::PageUp: {
+            f32 page = viewHeight();
+            isize rows = std::max<isize>(1, static_cast<isize>(page / itemHeight()));
+            isize next = std::max<isize>(0, cur - rows);
+            m_selectedIndices.clear();
+            m_selectedIndices.insert(next);
+            m_anchorIndex = next;
+            ensureVisible(next);
+            notifySelectionChanged();
+            invalidateRender();
+            return true;
+        }
+        case Key::PageDown: {
+            f32 page = viewHeight();
+            isize rows = std::max<isize>(1, static_cast<isize>(page / itemHeight()));
+            isize next = std::min(m_itemCount - 1, cur + rows);
+            m_selectedIndices.clear();
+            m_selectedIndices.insert(next);
+            m_anchorIndex = next;
+            ensureVisible(next);
+            notifySelectionChanged();
+            invalidateRender();
+            return true;
+        }
+        case Key::A: {
+            // Ctrl+A → select all (in Multiple or Extended mode)
+            if (event.hasControl() &&
+                (selectionMode() == SelectionMode::Multiple || selectionMode() == SelectionMode::Extended)) {
+                m_selectedIndices.clear();
+                for (isize j = 0; j < m_itemCount; ++j) m_selectedIndices.insert(j);
+                notifySelectionChanged();
+                invalidateRender();
+                return true;
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    return false;
+}
+
+// ---- Mouse enter / leave ----------------------------------------------------
+
+void ListView::onMouseEnter() {
+    Element::onMouseEnter();
+}
+
+void ListView::onMouseLeave() {
+    if (m_hoveredItem != -1) {
+        m_hoveredItem = -1;
+        invalidateRender();
+    }
+    Element::onMouseLeave();
+}
+
+} // namespace gut
+
+
 // --- elements/Dialog.cpp ---
 
 #include <cmath>
@@ -21741,6 +22410,197 @@ bool ContextMenu::onKeyEvent(const KeyEvent& event) {
     }
 
     return true; // consume all keys while open
+}
+
+} // namespace gut
+
+
+// === Toast implementation ====================================================
+
+#include <vector>
+#include <algorithm>
+
+namespace gut {
+
+namespace {
+
+struct ToastEntry {
+    String message;
+    ToastPosition position;
+    f64 showTime;     // context totalTime when shown
+    f32 duration;     // seconds to stay visible
+    Context* ctx;
+};
+
+// All active toasts, shared across contexts
+struct ToastManager {
+    std::vector<ToastEntry> entries;
+    // Dummy overlay owner per context (one per context)
+    std::unordered_map<Context*, Ref<Element>> overlayOwners;
+
+    void ensureOverlay(Context* ctx) {
+        if (overlayOwners.count(ctx)) return;
+        auto owner = make<Panel>();
+        ctx->addOverlay(owner.get(), [this, ctx](RenderContext& rc) {
+            renderToasts(rc, ctx);
+        });
+        overlayOwners[ctx] = std::move(owner);
+    }
+
+    void removeOverlayIfEmpty(Context* ctx) {
+        // Still have toasts for this context?
+        for (auto& e : entries) {
+            if (e.ctx == ctx) return;
+        }
+        auto it = overlayOwners.find(ctx);
+        if (it != overlayOwners.end()) {
+            ctx->removeOverlay(it->second.get());
+            overlayOwners.erase(it);
+        }
+    }
+
+    void renderToasts(RenderContext& rc, Context* ctx) {
+        const auto& sty = Toast::style();
+        f64 now = ctx->totalTime();
+
+        // Expire old toasts
+        entries.erase(
+            std::remove_if(entries.begin(), entries.end(),
+                [now](const ToastEntry& e) { return now - e.showTime >= e.duration; }),
+            entries.end());
+
+        if (entries.empty()) {
+            // Schedule overlay removal (safe — we're inside render, so defer)
+            return;
+        }
+
+        Size2f frame = rc.frameSize();
+        Font* font = ctx->defaultFont();
+        if (!font) return;
+        auto face = font->getFace(sty.fontSize);
+        if (!face) return;
+
+        // Group toasts by position and render each stack
+        for (u8 p = 0; p <= static_cast<u8>(ToastPosition::BottomRight); ++p) {
+            auto pos = static_cast<ToastPosition>(p);
+
+            // Collect toasts for this position + context
+            std::vector<const ToastEntry*> stack;
+            for (auto& e : entries) {
+                if (e.ctx == ctx && e.position == pos) stack.push_back(&e);
+            }
+            if (stack.empty()) continue;
+
+            // Determine anchor point
+            bool top = (pos == ToastPosition::TopLeft || pos == ToastPosition::TopCenter || pos == ToastPosition::TopRight);
+            bool left = (pos == ToastPosition::TopLeft || pos == ToastPosition::BottomLeft);
+            bool center = (pos == ToastPosition::TopCenter || pos == ToastPosition::BottomCenter);
+
+            f32 cursorY = top ? sty.margin : frame.height - sty.margin;
+
+            for (auto* entry : stack) {
+                f64 age = now - entry->showTime;
+                // Fade in (first 150ms) and fade out (last 400ms)
+                // age and entry->duration are both in milliseconds
+                f32 alpha = 1.0f;
+                constexpr f64 fadeInMs  = 150.0;
+                constexpr f64 fadeOutMs = 400.0;
+                if (age < fadeInMs) alpha = static_cast<f32>(age / fadeInMs);
+                else if (age > entry->duration - fadeOutMs)
+                    alpha = static_cast<f32>((entry->duration - age) / fadeOutMs);
+                alpha = std::clamp(alpha, 0.0f, 1.0f);
+
+                // Measure text (simple single-line for now, clamp to maxWidth)
+                f32 textW = face->measureWidth(entry->message);
+                if (textW > sty.maxWidth) textW = sty.maxWidth;
+                f32 boxW = textW + sty.paddingH * 2.0f;
+                f32 boxH = face->lineHeight() + sty.paddingV * 2.0f;
+
+                // X position
+                f32 bx;
+                if (center) bx = (frame.width - boxW) * 0.5f;
+                else if (left) bx = sty.margin;
+                else bx = frame.width - sty.margin - boxW;
+
+                // Y position (stack grows away from edge)
+                f32 by;
+                if (top) {
+                    by = cursorY;
+                    cursorY += boxH + sty.spacing;
+                } else {
+                    by = cursorY - boxH;
+                    cursorY -= boxH + sty.spacing;
+                }
+
+                // Draw with alpha
+                Color bg = sty.background;
+                bg.a *= alpha;
+                Color fg = sty.foreground;
+                fg.a *= alpha;
+                Color bc = sty.borderColor;
+                bc.a *= alpha;
+
+                // Shadow
+                Color shadowC = Color::fromRgba8(0, 0, 0, static_cast<u8>(60.0f * alpha));
+                rc.fillRoundedRect({bx + 2.0f, by + 2.0f, boxW, boxH}, sty.cornerRadius, shadowC);
+
+                // Background + border
+                rc.fillRoundedRect({bx, by, boxW, boxH}, sty.cornerRadius, bg);
+                rc.strokeRoundedRect({bx, by, boxW, boxH}, sty.cornerRadius, bc, 1.0f);
+
+                // Text (clip to maxWidth)
+                f32 tx = bx + sty.paddingH;
+                f32 ty = by + sty.paddingV + face->ascender();
+                rc.save();
+                rc.pushClip({bx + sty.paddingH, by + sty.paddingV,
+                             boxW - sty.paddingH * 2.0f, boxH - sty.paddingV * 2.0f});
+                rc.drawText(face.get(), entry->message, {tx, ty}, fg);
+                rc.popClip();
+                rc.restore();
+            }
+        }
+
+        // Clean up overlay if all toasts expired
+        removeOverlayIfEmpty(ctx);
+    }
+};
+
+ToastManager& toastManager() {
+    static ToastManager mgr;
+    return mgr;
+}
+
+} // anonymous namespace
+
+Toast::Style& Toast::style() {
+    static Style s;
+    return s;
+}
+
+void Toast::show(Context* ctx, String message, ToastPosition position, f32 durationSec) {
+    if (!ctx) return;
+
+    auto& mgr = toastManager();
+    const auto& sty = Toast::style();
+
+    f32 dur = durationSec > 0.0f ? durationSec : sty.defaultDuration;
+
+    // totalTime() is in milliseconds (Context::update receives ms deltas),
+    // so convert duration from seconds to milliseconds.
+    f32 durMs = dur * 1000.0f;
+
+    mgr.entries.push_back({std::move(message), position, ctx->totalTime(), durMs, ctx});
+    mgr.ensureOverlay(ctx);
+}
+
+void Toast::dismissAll(Context* ctx) {
+    if (!ctx) return;
+    auto& mgr = toastManager();
+    mgr.entries.erase(
+        std::remove_if(mgr.entries.begin(), mgr.entries.end(),
+            [ctx](const ToastEntry& e) { return e.ctx == ctx; }),
+        mgr.entries.end());
+    mgr.removeOverlayIfEmpty(ctx);
 }
 
 } // namespace gut

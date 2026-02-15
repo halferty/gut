@@ -620,6 +620,175 @@ TEST(button_click_stops_bubbling) {
 }
 
 // =============================================================================
+// ListView
+// =============================================================================
+
+TEST(listview_create) {
+    auto lv = gut::make<gut::ListView>();
+    ASSERT(lv != nullptr);
+    ASSERT(lv->itemCount() == 0);
+    ASSERT(lv->selectionMode() == gut::SelectionMode::Single);
+    ASSERT(lv->selectedIndex() == -1);
+    ASSERT(lv->selectedIndices().empty());
+}
+
+TEST(listview_item_count) {
+    auto lv = gut::make<gut::ListView>();
+    lv->setItemCount(500);
+    ASSERT(lv->itemCount() == 500);
+    // Changing item count clears selection
+    lv->selectIndex(0);
+    lv->setItemCount(100);
+    ASSERT(lv->itemCount() == 100);
+    ASSERT(lv->selectedIndices().empty());
+}
+
+TEST(listview_single_selection) {
+    auto lv = gut::make<gut::ListView>();
+    lv->setselectionMode(gut::SelectionMode::Single);
+    lv->setItemCount(10);
+
+    lv->selectIndex(3);
+    ASSERT(lv->selectedIndex() == 3);
+    ASSERT(lv->selectedIndices().size() == 1);
+
+    // Selecting another index in Single mode replaces the previous
+    lv->selectIndex(7);
+    ASSERT(lv->selectedIndex() == 7);
+    ASSERT(lv->selectedIndices().size() == 1);
+
+    // Out-of-range is ignored
+    lv->selectIndex(999);
+    ASSERT(lv->selectedIndex() == 7);
+}
+
+TEST(listview_extended_selection) {
+    auto lv = gut::make<gut::ListView>();
+    lv->setselectionMode(gut::SelectionMode::Extended);
+    lv->setItemCount(20);
+
+    lv->selectIndex(2);
+    lv->selectRange(5, 8);
+    // Should have indices 5..8 selected (selectRange replaces)
+    ASSERT(lv->selectedIndices().count(5) == 1);
+    ASSERT(lv->selectedIndices().count(6) == 1);
+    ASSERT(lv->selectedIndices().count(7) == 1);
+    ASSERT(lv->selectedIndices().count(8) == 1);
+}
+
+TEST(listview_deselect_all) {
+    auto lv = gut::make<gut::ListView>();
+    lv->setItemCount(10);
+    lv->selectIndex(3);
+    ASSERT(!lv->selectedIndices().empty());
+    lv->deselectAll();
+    ASSERT(lv->selectedIndices().empty());
+    ASSERT(lv->selectedIndex() == -1);
+}
+
+TEST(listview_selection_mode_none) {
+    auto lv = gut::make<gut::ListView>();
+    lv->setselectionMode(gut::SelectionMode::None);
+    lv->setItemCount(10);
+    lv->selectIndex(3);
+    // In None mode, selection should remain empty
+    ASSERT(lv->selectedIndices().empty());
+    ASSERT(lv->selectedIndex() == -1);
+}
+
+TEST(listview_selection_callback) {
+    auto lv = gut::make<gut::ListView>();
+    lv->setItemCount(10);
+
+    int callCount = 0;
+    gut::isize lastSelectedIdx = -1;
+    lv->setOnSelectionChanged([&](const std::set<gut::isize>& sel) {
+        callCount++;
+        if (!sel.empty()) lastSelectedIdx = *sel.begin();
+    });
+
+    lv->selectIndex(4);
+    ASSERT(callCount == 1);
+    ASSERT(lastSelectedIdx == 4);
+
+    lv->deselectAll();
+    ASSERT(callCount == 2);
+}
+
+TEST(listview_properties) {
+    auto lv = gut::make<gut::ListView>();
+    lv->setitemHeight(40.0f);
+    ASSERT(lv->itemHeight() == 40.0f);
+
+    lv->setfontSize(16.0f);
+    ASSERT(lv->fontSize() == 16.0f);
+}
+
+// =============================================================================
+// Toast
+// =============================================================================
+
+TEST(toast_style_defaults) {
+    auto& sty = gut::Toast::style();
+    ASSERT(sty.defaultDuration == 3.0f);
+    ASSERT(sty.fontSize == 12.0f);
+    ASSERT(sty.cornerRadius == 6.0f);
+    ASSERT(sty.maxWidth == 320.0f);
+}
+
+TEST(toast_show_no_crash) {
+    // Showing a toast with a valid context should not crash
+    auto backend = std::make_unique<gut::NullRenderBackend>();
+    gut::Context ctx(std::move(backend));
+    ctx.update(0.0f); // initialise totalTime
+
+    gut::Toast::show(&ctx, "Hello Toast", gut::ToastPosition::BottomRight);
+    // Render a frame so the overlay runs
+    ctx.render(800, 600);
+    // No crash = pass
+
+    gut::Toast::dismissAll(&ctx);
+}
+
+TEST(toast_dismiss_all) {
+    auto backend = std::make_unique<gut::NullRenderBackend>();
+    gut::Context ctx(std::move(backend));
+    ctx.update(0.0f);
+
+    gut::Toast::show(&ctx, "Toast 1", gut::ToastPosition::TopLeft);
+    gut::Toast::show(&ctx, "Toast 2", gut::ToastPosition::TopRight);
+    gut::Toast::show(&ctx, "Toast 3", gut::ToastPosition::BottomCenter);
+
+    // Should not crash
+    ctx.render(800, 600);
+    gut::Toast::dismissAll(&ctx);
+    ctx.render(800, 600);
+}
+
+TEST(toast_positions) {
+    auto backend = std::make_unique<gut::NullRenderBackend>();
+    gut::Context ctx(std::move(backend));
+    ctx.update(0.0f);
+
+    // Fire one toast at every position — just verify no crash
+    gut::Toast::show(&ctx, "TL", gut::ToastPosition::TopLeft);
+    gut::Toast::show(&ctx, "TC", gut::ToastPosition::TopCenter);
+    gut::Toast::show(&ctx, "TR", gut::ToastPosition::TopRight);
+    gut::Toast::show(&ctx, "BL", gut::ToastPosition::BottomLeft);
+    gut::Toast::show(&ctx, "BC", gut::ToastPosition::BottomCenter);
+    gut::Toast::show(&ctx, "BR", gut::ToastPosition::BottomRight);
+
+    ctx.render(800, 600);
+    gut::Toast::dismissAll(&ctx);
+}
+
+TEST(toast_null_context_safe) {
+    // Passing nullptr should be a no-op, no crash
+    gut::Toast::show(nullptr, "nope");
+    gut::Toast::dismissAll(nullptr);
+}
+
+// =============================================================================
 // Main
 // =============================================================================
 
@@ -695,6 +864,23 @@ int main() {
     RUN_TEST(bubble_wheel_to_parent);
     RUN_TEST(bubble_key_to_parent);
     RUN_TEST(button_click_stops_bubbling);
+    
+    // ListView
+    RUN_TEST(listview_create);
+    RUN_TEST(listview_item_count);
+    RUN_TEST(listview_single_selection);
+    RUN_TEST(listview_extended_selection);
+    RUN_TEST(listview_deselect_all);
+    RUN_TEST(listview_selection_mode_none);
+    RUN_TEST(listview_selection_callback);
+    RUN_TEST(listview_properties);
+    
+    // Toast
+    RUN_TEST(toast_style_defaults);
+    RUN_TEST(toast_show_no_crash);
+    RUN_TEST(toast_dismiss_all);
+    RUN_TEST(toast_positions);
+    RUN_TEST(toast_null_context_safe);
     
     std::cout << "\n==========================================\n";
     std::cout << "Results: " << testsPassed << " passed, " << testsFailed << " failed\n";

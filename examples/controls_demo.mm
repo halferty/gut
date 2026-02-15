@@ -2869,6 +2869,359 @@ private:
         tabControl->addTab("Tooltips & Menus", page);
     }
 
+    // =====================================================================
+    // TAB 10 — "ListView"
+    // =====================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(W - 40);
+        page->setheight(H - 95 - 34);
+
+        f32 sx = 20, sy = 20;
+
+        // ── Left column: Basic ListView (Single select, 500 items) ──────
+        {
+            auto t = make<Text>("ListView — Single Selection", 14.0f);
+            t->setforeground(c(200, 200, 220));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, sx);
+            Canvas::setTop(*t, sy);
+        }
+        {
+            auto t = make<Text>("500 virtualised items. Click to select, Up/Down/Home/End/PgUp/PgDn for keyboard nav.", 10.0f);
+            t->setforeground(c(110, 110, 130));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, sx);
+            Canvas::setTop(*t, sy + 20);
+        }
+
+        auto singleStatus = make<Text>("Selected: (none)", 10.5f);
+        singleStatus->setforeground(c(100, 200, 120));
+        singleStatus->setisHitTestVisible(false);
+        page->addChild(singleStatus);
+        Canvas::setLeft(*singleStatus, sx);
+        Canvas::setTop(*singleStatus, sy + 370);
+
+        {
+            auto listView = make<ListView>();
+            listView->setwidth(290);
+            listView->setheight(320);
+            listView->setItemCount(500);
+            listView->setselectionMode(SelectionMode::Single);
+
+            // Custom item template with icon-like prefix + label
+            listView->setItemTemplate([&c](isize index) -> Ref<Element> {
+                auto row = make<Panel>();
+                row->setbackground(Color::transparent());
+
+                // Simple text item with an emoji-like prefix
+                const char* icons[] = {
+                    "\xe2\x98\x85", "\xe2\x97\x86", "\xe2\x96\xb6",
+                    "\xe2\x9c\xa6", "\xe2\x97\x89"
+                };
+                String prefix = icons[index % 5];
+                String label = prefix + "  Item #" + std::to_string(index);
+
+                auto t = make<Text>(label, 11.5f);
+                t->setforeground(gut::Color::fromRgba8(200, 200, 220, 255));
+                t->setisHitTestVisible(false);
+                row->addChild(t);
+                return row;
+            });
+
+            listView->setOnSelectionChanged([singleStatus](const std::set<gut::isize>& sel) {
+                if (sel.empty()) {
+                    singleStatus->settext("Selected: (none)");
+                } else {
+                    singleStatus->settext("Selected: Item #" + std::to_string(*sel.begin()));
+                }
+            });
+
+            listView->setOnItemDoubleClicked([singleStatus](gut::isize idx) {
+                singleStatus->setforeground(gut::Color::fromRgba8(255, 200, 80));
+                singleStatus->settext("Double-clicked: Item #" + std::to_string(idx));
+            });
+
+            page->addChild(listView);
+            Canvas::setLeft(*listView, sx);
+            Canvas::setTop(*listView, sy + 42);
+        }
+
+        // ── Right column: Extended selection ListView ────────────────────
+        f32 rx = 340;
+
+        {
+            auto t = make<Text>("ListView — Extended Selection", 14.0f);
+            t->setforeground(c(200, 200, 220));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, rx);
+            Canvas::setTop(*t, sy);
+        }
+        {
+            auto t = make<Text>("Ctrl+click to toggle, Shift+click for range, Ctrl+A to select all.", 10.0f);
+            t->setforeground(c(110, 110, 130));
+            t->setisHitTestVisible(false);
+            page->addChild(t);
+            Canvas::setLeft(*t, rx);
+            Canvas::setTop(*t, sy + 20);
+        }
+
+        auto extStatus = make<Text>("Selected: 0 items", 10.5f);
+        extStatus->setforeground(c(100, 180, 255));
+        extStatus->setisHitTestVisible(false);
+        page->addChild(extStatus);
+        Canvas::setLeft(*extStatus, rx);
+        Canvas::setTop(*extStatus, sy + 370);
+
+        {
+            // Fruit / vegetable themed list
+            static const char* items[] = {
+                "Apple", "Banana", "Cherry", "Date", "Elderberry",
+                "Fig", "Grape", "Honeydew", "Jackfruit", "Kiwi",
+                "Lemon", "Mango", "Nectarine", "Orange", "Papaya",
+                "Quince", "Raspberry", "Strawberry", "Tangerine", "Ugli Fruit",
+                "Vanilla Bean", "Watermelon", "Xigua", "Yuzu", "Zucchini",
+                "Avocado", "Blueberry", "Cantaloupe", "Dragonfruit", "Eggplant",
+                "Feijoa", "Guava", "Habanero", "Iceberg Lettuce", "Jalapeno",
+                "Kumquat", "Lime", "Mandarin", "Nutmeg", "Olive"
+            };
+            constexpr int itemTotal = 40;
+
+            auto listView2 = make<ListView>();
+            listView2->setwidth(290);
+            listView2->setheight(320);
+            listView2->setItemCount(itemTotal);
+            listView2->setselectionMode(SelectionMode::Extended);
+            listView2->setitemHeight(30.0f);
+            listView2->setlistBackground(Color::fromRgba8(25, 28, 38, 255));
+            listView2->setitemSelectedBackground(Color::fromRgba8(60, 120, 200, 255));
+
+            listView2->setItemTemplate([&c](isize index) -> Ref<Element> {
+                auto row = make<Panel>();
+                row->setbackground(Color::transparent());
+
+                String label = std::to_string(index + 1) + ".  " + items[index % itemTotal];
+                auto t = make<Text>(label, 12.0f);
+                t->setforeground(gut::Color::fromRgba8(210, 210, 230, 255));
+                t->setisHitTestVisible(false);
+                row->addChild(t);
+                return row;
+            });
+
+            listView2->setOnSelectionChanged([extStatus](const std::set<gut::isize>& sel) {
+                extStatus->settext("Selected: " + std::to_string(sel.size()) + " items");
+            });
+
+            page->addChild(listView2);
+            Canvas::setLeft(*listView2, rx);
+            Canvas::setTop(*listView2, sy + 42);
+        }
+
+        // Feature list
+        {
+            f32 fy = sy + 398;
+            const char* features[] = {
+                "\xe2\x9c\x93  Virtualised rendering (only visible rows)",
+                "\xe2\x9c\x93  Single / Multiple / Extended selection",
+                "\xe2\x9c\x93  Custom item templates (any Element)",
+                "\xe2\x9c\x93  Keyboard: Up/Down/Home/End/PgUp/PgDn",
+                "\xe2\x9c\x93  Shift+click range, Ctrl+click toggle",
+                "\xe2\x9c\x93  Ctrl+A select all, scrollbar thumb drag",
+                "\xe2\x9c\x93  Double-click callback",
+            };
+            for (int i = 0; i < 7; ++i) {
+                auto t = make<Text>(features[i], 10.0f);
+                t->setforeground(c(100, 180, 120));
+                t->setisHitTestVisible(false);
+                page->addChild(t);
+                Canvas::setLeft(*t, sx);
+                Canvas::setTop(*t, fy + i * 17);
+            }
+        }
+
+        tabControl->addTab("ListView", page);
+    }
+
+    // =================================================================
+    //  Tab 11 — Toast / Notification
+    // =================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(900);
+        page->setheight(600);
+
+        // Title
+        auto title = make<Text>("Toast / Notification", 18.0f);
+        title->setforeground(Color::white());
+        Canvas::setLeft(*title, 20);
+        Canvas::setTop(*title, 16);
+        page->addChild(title);
+
+        auto subtitle = make<Text>("Click each button to fire a toast at that screen position.", 11.0f);
+        subtitle->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*subtitle, 20);
+        Canvas::setTop(*subtitle, 42);
+        page->addChild(subtitle);
+
+        // --- Row 1 — Top positions ---
+        f32 row1Y = 80.0f;
+
+        auto btnTopLeft = make<Button>("Top Left");
+        btnTopLeft->setwidth(130);
+        btnTopLeft->setheight(34);
+        Canvas::setLeft(*btnTopLeft, 20);
+        Canvas::setTop(*btnTopLeft, row1Y);
+        btnTopLeft->setOnClick([ctx = _context.get()]() {
+            Toast::show(ctx, "Top-left notification", ToastPosition::TopLeft);
+        });
+        page->addChild(btnTopLeft);
+
+        auto btnTopCenter = make<Button>("Top Center");
+        btnTopCenter->setwidth(130);
+        btnTopCenter->setheight(34);
+        Canvas::setLeft(*btnTopCenter, 170);
+        Canvas::setTop(*btnTopCenter, row1Y);
+        btnTopCenter->setOnClick([ctx = _context.get()]() {
+            Toast::show(ctx, "Top-center notification", ToastPosition::TopCenter);
+        });
+        page->addChild(btnTopCenter);
+
+        auto btnTopRight = make<Button>("Top Right");
+        btnTopRight->setwidth(130);
+        btnTopRight->setheight(34);
+        Canvas::setLeft(*btnTopRight, 320);
+        Canvas::setTop(*btnTopRight, row1Y);
+        btnTopRight->setOnClick([ctx = _context.get()]() {
+            Toast::show(ctx, "Top-right notification", ToastPosition::TopRight);
+        });
+        page->addChild(btnTopRight);
+
+        // --- Row 2 — Bottom positions ---
+        f32 row2Y = 130.0f;
+
+        auto btnBotLeft = make<Button>("Bottom Left");
+        btnBotLeft->setwidth(130);
+        btnBotLeft->setheight(34);
+        Canvas::setLeft(*btnBotLeft, 20);
+        Canvas::setTop(*btnBotLeft, row2Y);
+        btnBotLeft->setOnClick([ctx = _context.get()]() {
+            Toast::show(ctx, "Bottom-left notification", ToastPosition::BottomLeft);
+        });
+        page->addChild(btnBotLeft);
+
+        auto btnBotCenter = make<Button>("Bottom Center");
+        btnBotCenter->setwidth(130);
+        btnBotCenter->setheight(34);
+        Canvas::setLeft(*btnBotCenter, 170);
+        Canvas::setTop(*btnBotCenter, row2Y);
+        btnBotCenter->setOnClick([ctx = _context.get()]() {
+            Toast::show(ctx, "Bottom-center notification", ToastPosition::BottomCenter);
+        });
+        page->addChild(btnBotCenter);
+
+        auto btnBotRight = make<Button>("Bottom Right");
+        btnBotRight->setwidth(130);
+        btnBotRight->setheight(34);
+        Canvas::setLeft(*btnBotRight, 320);
+        Canvas::setTop(*btnBotRight, row2Y);
+        btnBotRight->setOnClick([ctx = _context.get()]() {
+            Toast::show(ctx, "Bottom-right notification", ToastPosition::BottomRight);
+        });
+        page->addChild(btnBotRight);
+
+        // --- Row 3 — Special toasts ---
+        f32 row3Y = 195.0f;
+
+        auto hdrSpecial = make<Text>("Special Cases", 13.0f);
+        hdrSpecial->setforeground(c(130, 170, 255));
+        Canvas::setLeft(*hdrSpecial, 20);
+        Canvas::setTop(*hdrSpecial, row3Y);
+        page->addChild(hdrSpecial);
+
+        auto btnLong = make<Button>("Long Message");
+        btnLong->setwidth(130);
+        btnLong->setheight(34);
+        Canvas::setLeft(*btnLong, 20);
+        Canvas::setTop(*btnLong, row3Y + 28);
+        btnLong->setOnClick([ctx = _context.get()]() {
+            Toast::show(ctx, "Connection lost. Retrying in 5 seconds... please check your network settings.",
+                        ToastPosition::BottomRight);
+        });
+        page->addChild(btnLong);
+
+        auto btnShort = make<Button>("Short (1s)");
+        btnShort->setwidth(130);
+        btnShort->setheight(34);
+        Canvas::setLeft(*btnShort, 170);
+        Canvas::setTop(*btnShort, row3Y + 28);
+        btnShort->setOnClick([ctx = _context.get()]() {
+            Toast::show(ctx, "Saved!", ToastPosition::TopCenter, 1.0f);
+        });
+        page->addChild(btnShort);
+
+        auto btnLongDur = make<Button>("Long (8s)");
+        btnLongDur->setwidth(130);
+        btnLongDur->setheight(34);
+        Canvas::setLeft(*btnLongDur, 320);
+        Canvas::setTop(*btnLongDur, row3Y + 28);
+        btnLongDur->setOnClick([ctx = _context.get()]() {
+            Toast::show(ctx, "This toast stays for 8 seconds", ToastPosition::BottomRight, 8.0f);
+        });
+        page->addChild(btnLongDur);
+
+        auto btnStack = make<Button>("Rapid Stack (x5)");
+        btnStack->setwidth(150);
+        btnStack->setheight(34);
+        Canvas::setLeft(*btnStack, 20);
+        Canvas::setTop(*btnStack, row3Y + 76);
+        btnStack->setOnClick([ctx = _context.get()]() {
+            for (int i = 1; i <= 5; ++i) {
+                Toast::show(ctx, "Notification #" + std::to_string(i),
+                            ToastPosition::BottomRight, 3.0f + i * 0.5f);
+            }
+        });
+        page->addChild(btnStack);
+
+        auto btnDismiss = make<Button>("Dismiss All");
+        btnDismiss->setwidth(130);
+        btnDismiss->setheight(34);
+        Canvas::setLeft(*btnDismiss, 190);
+        Canvas::setTop(*btnDismiss, row3Y + 76);
+        btnDismiss->setOnClick([ctx = _context.get()]() {
+            Toast::dismissAll(ctx);
+        });
+        page->addChild(btnDismiss);
+
+        // --- Feature list ---
+        f32 fy = row3Y + 130.0f;
+        auto featHdr = make<Text>("Features", 13.0f);
+        featHdr->setforeground(c(130, 170, 255));
+        Canvas::setLeft(*featHdr, 20);
+        Canvas::setTop(*featHdr, fy);
+        page->addChild(featHdr);
+
+        const char* features[] = {
+            "6 positions: TopLeft / TopCenter / TopRight / BottomLeft / BottomCenter / BottomRight",
+            "Auto-dismiss with configurable duration",
+            "Fade-in (0.15s) and fade-out (0.4s) animation",
+            "Multiple toasts stack vertically",
+            "Global style: background, foreground, border, fontSize, cornerRadius, padding",
+            "Toast::dismissAll() clears everything instantly",
+        };
+        for (int i = 0; i < 6; ++i) {
+            auto ft = make<Text>(String("  ") + features[i], 10.5f);
+            ft->setforeground(c(170, 170, 190));
+            Canvas::setLeft(*ft, 20);
+            Canvas::setTop(*ft, fy + 22 + i * 17);
+            page->addChild(ft);
+        }
+
+        tabControl->addTab("Toast", page);
+    }
+
     _context->setRoot(root);
 
     // Cursor style callback — map gut::CursorType to NSCursor

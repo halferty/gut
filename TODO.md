@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 78 done, 2 partial, 12 punted, 17 remaining** out of 109 features.
+**Score: 80 done, 2 partial, 12 punted, 15 remaining** out of 109 features.
 
 ---
 
@@ -90,11 +90,11 @@
 - [x] Tooltip — Tooltip::set(element, text), overlay-based popup on hover, auto-positioning within window bounds
 - [x] ContextMenu — right-click popup menu with items, separators, disabled items, hover highlight, overlay/captureMouse
 - [x] TabControl — scrollable tabs with < > arrow buttons when overflow, keyboard nav, hover highlight
-- [ ] ListView / ItemsControl
-- [ ] TreeView
+- [x] ListView / ItemsControl — virtualised scrollable list, item templates, Single/Multiple/Extended selection, keyboard nav, Ctrl+click/Shift+click, scrollbar
+- [p] TreeView (PUNT)
 - [x] Dialog / Modal — modal overlay with backdrop, draggable title bar, close (X), configurable buttons (OK/Cancel/Yes/No), word-wrapping message, Escape/Enter keys
-- [ ] Toast / Notification
-- [ ] Splitter / Resizable panels
+- [x] Toast / Notification — auto-dismissing overlay, 6 positions (TopLeft/TopCenter/TopRight/BottomLeft/BottomCenter/BottomRight), stacking, fade-in/out, configurable duration, global Style
+- [p] Splitter / Resizable panels (PUNT)
 - [ ] Toolbar
 - [ ] Menu bar
 - [ ] Expander / Accordion
