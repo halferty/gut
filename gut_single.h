@@ -7196,7 +7196,50 @@ public:
             }
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Clipboard
+    // -------------------------------------------------------------------------
+
+    /**
+     * @brief Set a callback that returns the current clipboard text.
+     * The platform layer should implement this using native APIs
+     * (e.g., OpenClipboard/GetClipboardData on Windows, NSPasteboard on macOS).
+     */
+    void setOnGetClipboardText(std::function<String()> callback) {
+        m_onGetClipboardText = std::move(callback);
+    }
+
+    /**
+     * @brief Set a callback that sets the clipboard text.
+     * The platform layer should implement this using native APIs
+     * (e.g., OpenClipboard/SetClipboardData on Windows, NSPasteboard on macOS).
+     */
+    void setOnSetClipboardText(std::function<void(const String&)> callback) {
+        m_onSetClipboardText = std::move(callback);
+    }
+
+    /**
+     * @brief Get text from the system clipboard.
+     * @return Clipboard text, or empty string if unavailable.
+     */
+    String getClipboardText() {
+        if (m_onGetClipboardText) {
+            return m_onGetClipboardText();
+        }
+        return {};
+    }
+
+    /**
+     * @brief Set text to the system clipboard.
+     * @param text The text to copy to clipboard.
+     */
+    void setClipboardText(const String& text) {
+        if (m_onSetClipboardText) {
+            m_onSetClipboardText(text);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Font loading
     // -------------------------------------------------------------------------
@@ -7299,6 +7342,10 @@ private:
     // Cursor
     CursorType m_currentCursor{CursorType::Arrow};
     std::function<void(CursorType)> m_onCursorChanged;
+
+    // Clipboard
+    std::function<String()> m_onGetClipboardText;
+    std::function<void(const String&)> m_onSetClipboardText;
 
     // Overlay render callbacks (popups, tooltips, etc.)
     std::vector<std::pair<Element*, std::function<void(RenderContext&)>>> m_overlays;
@@ -7407,7 +7454,8 @@ GUT_API void shutdown();
 // ============================================================================
 // IMPLEMENTATION
 // ============================================================================
-#ifdef GUT_IMPLEMENTATION
+#if defined(GUT_IMPLEMENTATION) && !defined(GUT_IMPLEMENTATION_INCLUDED)
+#define GUT_IMPLEMENTATION_INCLUDED
 
 // --- Embedded stb_truetype.h (v1.26, public domain by Sean Barrett) ---
 // Inlined here so gut_single.h is fully self-contained.
@@ -25253,23 +25301,25 @@ bool TextBox::onKeyEvent(const KeyEvent& event) {
             break;
 
         case Key::C:
-            if (cmd && hasSelection()) {
-                // Copy — platform-specific. We'll just store in a static for now.
-                // In a real app, this would go to the system clipboard.
+            if (cmd && hasSelection() && context()) {
+                context()->setClipboardText(selectedText());
                 return true;
             }
             break;
 
         case Key::V:
-            if (cmd) {
-                // Paste — would read from system clipboard.
+            if (cmd && context()) {
+                String clipText = context()->getClipboardText();
+                if (!clipText.empty()) {
+                    insertText(clipText);
+                }
                 return true;
             }
             break;
 
         case Key::X:
-            if (cmd && hasSelection()) {
-                // Cut — copy + delete selection
+            if (cmd && hasSelection() && context()) {
+                context()->setClipboardText(selectedText());
                 deleteText(0);
                 return true;
             }
@@ -25755,5 +25805,5 @@ void shutdown() {
 } // namespace gut
 
 
-#endif // GUT_IMPLEMENTATION
+#endif // GUT_IMPLEMENTATION && !GUT_IMPLEMENTATION_INCLUDED
 

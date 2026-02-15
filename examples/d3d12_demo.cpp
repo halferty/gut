@@ -27,6 +27,9 @@ using Microsoft::WRL::ComPtr;
 #include <memory>
 #include <chrono>
 
+// Shared UI code
+#include "demo_ui.h"
+
 // ============================================================================
 // Globals
 // ============================================================================
@@ -39,9 +42,10 @@ static ComPtr<ID3D12CommandQueue>   g_commandQueue;
 static ComPtr<IDXGISwapChain3>      g_swapChain;
 
 static std::unique_ptr<gut::Context> g_gutCtx;
+static std::vector<gut::Ref<gut::FloatAnimation>> g_animations;
 static bool g_running = true;
-static UINT g_width = 1280;
-static UINT g_height = 800;
+static UINT g_width = 1100;
+static UINT g_height = 720;
 static float g_dpi = 1.0f;
 
 // ============================================================================
@@ -109,404 +113,83 @@ static bool InitD3D12(HWND hwnd) {
 // ============================================================================
 
 static void BuildUI() {
-    using namespace gut;
-
-    auto backend = std::make_unique<D3D12RenderBackend>(
+    auto backend = std::make_unique<gut::D3D12RenderBackend>(
         g_device.Get(), g_commandQueue.Get(), g_swapChain.Get());
 
-    g_gutCtx = std::make_unique<Context>(std::move(backend));
+    g_gutCtx = std::make_unique<gut::Context>(std::move(backend));
 
-    // Load system font
+    // Clipboard callbacks (Windows)
+    g_gutCtx->setOnGetClipboardText([]() -> gut::String {
+        if (!OpenClipboard(nullptr)) return {};
+        gut::String result;
+        HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+        if (hData) {
+            wchar_t* text = static_cast<wchar_t*>(GlobalLock(hData));
+            if (text) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 0) {
+                    std::vector<char> buffer(len);
+                    WideCharToMultiByte(CP_UTF8, 0, text, -1, buffer.data(), len, nullptr, nullptr);
+                    result = buffer.data();
+                }
+                GlobalUnlock(hData);
+            }
+        }
+        CloseClipboard();
+        return result;
+    });
+    g_gutCtx->setOnSetClipboardText([](const gut::String& text) {
+        if (!OpenClipboard(nullptr)) return;
+        EmptyClipboard();
+        int wlen = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, nullptr, 0);
+        if (wlen > 0) {
+            HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, wlen * sizeof(wchar_t));
+            if (hMem) {
+                wchar_t* dest = static_cast<wchar_t*>(GlobalLock(hMem));
+                if (dest) {
+                    MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, dest, wlen);
+                    GlobalUnlock(hMem);
+                    SetClipboardData(CF_UNICODETEXT, hMem);
+                }
+            }
+        }
+        CloseClipboard();
+    });
+
+    // Load system fonts — multiple weights for font weight/style demo
     {
-        const char* fontPaths[] = {
-            "C:\\Windows\\Fonts\\segoeui.ttf",
-            "C:\\Windows\\Fonts\\arial.ttf",
-            "C:\\Windows\\Fonts\\tahoma.ttf",
+        struct FontFile { const char* path; } fontFiles[] = {
+            {"C:\\Windows\\Fonts\\segoeuil.ttf"},   // Light (300)
+            {"C:\\Windows\\Fonts\\segoeui.ttf"},    // Regular (400)
+            {"C:\\Windows\\Fonts\\segoeuib.ttf"},   // Bold (700)
+            {"C:\\Windows\\Fonts\\segoeuii.ttf"},   // Italic
+            {"C:\\Windows\\Fonts\\segoeuiz.ttf"},   // Bold Italic
         };
-        for (auto path : fontPaths) {
-            FILE* f = fopen(path, "rb");
+        for (auto& ff : fontFiles) {
+            FILE* f = fopen(ff.path, "rb");
             if (!f) continue;
             fseek(f, 0, SEEK_END);
             long sz = ftell(f);
             fseek(f, 0, SEEK_SET);
-            std::vector<u8> data(sz);
+            std::vector<gut::u8> data(sz);
             fread(data.data(), 1, sz, f);
             fclose(f);
             g_gutCtx->loadFont(data.data(), data.size());
-            break;
         }
     }
 
-    auto c = [](u8 r, u8 g, u8 b, u8 a = 255) { return Color::fromRgba8(r, g, b, a); };
+    // Build shared UI
+    demo::DemoConfig cfg;
+    cfg.width = g_width;
+    cfg.height = g_height;
+    cfg.backendName = "Direct3D 12";
+    cfg.backendShort = "D3D12";
+    cfg.shaderModel = "5.1";
+    cfg.extraInfo = "Double-buffered";
 
-    // Root canvas
-    auto root = makeRef<Canvas>();
-    root->setwidth(static_cast<f32>(g_width));
-    root->setheight(static_cast<f32>(g_height));
-    root->setbackground(c(20, 22, 30));
-
-    // --- Title ---
-    auto title = makeRef<Text>();
-    title->settext("Gut — D3D12 Demo");
-    title->setfontSize(28.0f);
-    title->setforeground(c(230, 235, 255));
-    Canvas::setLeft(*title, 30.0f);
-    Canvas::setTop(*title, 20.0f);
-    root->addChild(title);
-
-    // --- Info panel ---
-    auto infoPanel = makeRef<Panel>();
-    infoPanel->setwidth(350.0f);
-    infoPanel->setheight(180.0f);
-    infoPanel->setbackground(c(35, 38, 50));
-    infoPanel->setcornerRadius(8.0f);
-    infoPanel->setborderColor(c(60, 65, 90));
-    infoPanel->setborderWidth(1.0f);
-    Canvas::setLeft(*infoPanel, 30.0f);
-    Canvas::setTop(*infoPanel, 70.0f);
-    root->addChild(infoPanel);
-
-    auto infoStack = makeRef<StackPanel>();
-    infoStack->setorientation(Orientation::Vertical);
-    infoStack->setmargin(Thickness{16, 16, 16, 16});
-    infoPanel->addChild(infoStack);
-
-    auto addInfoRow = [&](const char* label, const char* value) {
-        auto row = makeRef<StackPanel>();
-        row->setorientation(Orientation::Horizontal);
-        row->setmargin(Thickness{0, 0, 0, 6});
-
-        auto lbl = makeRef<Text>();
-        lbl->settext(label);
-        lbl->setfontSize(14.0f);
-        lbl->setforeground(c(140, 150, 180));
-        row->addChild(lbl);
-
-        auto val = makeRef<Text>();
-        val->settext(value);
-        val->setfontSize(14.0f);
-        val->setforeground(c(220, 225, 240));
-        val->setmargin(Thickness{8, 0, 0, 0});
-        row->addChild(val);
-
-        infoStack->addChild(row);
-    };
-
-    addInfoRow("Backend:", "Direct3D 12");
-    addInfoRow("Shader Model:", "5.1");
-    addInfoRow("Resolution:", (std::to_string(g_width) + "x" + std::to_string(g_height)).c_str());
-    addInfoRow("Root Signature:", "CBV inline + SRV table");
-    addInfoRow("Frame Buffering:", "Double-buffered");
-
-    // --- Buttons column ---
-    auto buttonPanel = makeRef<Panel>();
-    buttonPanel->setwidth(350.0f);
-    buttonPanel->setheight(280.0f);
-    buttonPanel->setbackground(c(35, 38, 50));
-    buttonPanel->setcornerRadius(8.0f);
-    buttonPanel->setborderColor(c(60, 65, 90));
-    buttonPanel->setborderWidth(1.0f);
-    Canvas::setLeft(*buttonPanel, 30.0f);
-    Canvas::setTop(*buttonPanel, 270.0f);
-    root->addChild(buttonPanel);
-
-    auto btnStack = makeRef<StackPanel>();
-    btnStack->setorientation(Orientation::Vertical);
-    btnStack->setmargin(Thickness{16, 16, 16, 16});
-    buttonPanel->addChild(btnStack);
-
-    auto sectionTitle = makeRef<Text>();
-    sectionTitle->settext("Controls");
-    sectionTitle->setfontSize(16.0f);
-    sectionTitle->setforeground(c(200, 205, 220));
-    sectionTitle->setmargin(Thickness{0, 0, 0, 10});
-    btnStack->addChild(sectionTitle);
-
-    auto makeButton = [&](const char* text) {
-        auto btn = makeRef<Button>();
-        btn->setlabel(text);
-        btn->setwidth(200.0f);
-        btn->setheight(36.0f);
-        btn->setmargin(Thickness{0, 0, 0, 8});
-        return btn;
-    };
-
-    btnStack->addChild(makeButton("New Game"));
-    btnStack->addChild(makeButton("Continue"));
-    btnStack->addChild(makeButton("Options"));
-    btnStack->addChild(makeButton("Quit"));
-
-    // --- Checkbox / Radio section ---
-    auto checkBox = makeRef<CheckBox>();
-    checkBox->setlabel("Enable Ray Tracing");
-    checkBox->setforeground(c(200, 205, 220));
-    checkBox->setmargin(Thickness{0, 4, 0, 0});
-    btnStack->addChild(checkBox);
-
-    auto radio1 = makeRef<RadioButton>();
-    radio1->setlabel("Quality: Ultra");
-    radio1->setforeground(c(200, 205, 220));
-    radio1->setmargin(Thickness{0, 4, 0, 0});
-    btnStack->addChild(radio1);
-
-    auto radio2 = makeRef<RadioButton>();
-    radio2->setlabel("Quality: Medium");
-    radio2->setforeground(c(200, 205, 220));
-    radio2->setmargin(Thickness{0, 4, 0, 0});
-    btnStack->addChild(radio2);
-
-    // --- Slider panel ---
-    auto sliderPanel = makeRef<Panel>();
-    sliderPanel->setwidth(350.0f);
-    sliderPanel->setheight(120.0f);
-    sliderPanel->setbackground(c(35, 38, 50));
-    sliderPanel->setcornerRadius(8.0f);
-    sliderPanel->setborderColor(c(60, 65, 90));
-    sliderPanel->setborderWidth(1.0f);
-    Canvas::setLeft(*sliderPanel, 400.0f);
-    Canvas::setTop(*sliderPanel, 70.0f);
-    root->addChild(sliderPanel);
-
-    auto sliderStack = makeRef<StackPanel>();
-    sliderStack->setorientation(Orientation::Vertical);
-    sliderStack->setmargin(Thickness{16, 16, 16, 16});
-    sliderPanel->addChild(sliderStack);
-
-    auto sliderLabel = makeRef<Text>();
-    sliderLabel->settext("Render Scale");
-    sliderLabel->setfontSize(14.0f);
-    sliderLabel->setforeground(c(180, 185, 200));
-    sliderStack->addChild(sliderLabel);
-
-    auto slider = makeRef<Slider>();
-    slider->setwidth(300.0f);
-    slider->setminimum(50.0f);
-    slider->setmaximum(200.0f);
-    slider->setvalue(100.0f);
-    slider->setmargin(Thickness{0, 8, 0, 0});
-    sliderStack->addChild(slider);
-
-    auto sliderLabel2 = makeRef<Text>();
-    sliderLabel2->settext("FOV");
-    sliderLabel2->setfontSize(14.0f);
-    sliderLabel2->setforeground(c(180, 185, 200));
-    sliderLabel2->setmargin(Thickness{0, 8, 0, 0});
-    sliderStack->addChild(sliderLabel2);
-
-    auto slider2 = makeRef<Slider>();
-    slider2->setwidth(300.0f);
-    slider2->setminimum(60.0f);
-    slider2->setmaximum(120.0f);
-    slider2->setvalue(90.0f);
-    slider2->setmargin(Thickness{0, 4, 0, 0});
-    sliderStack->addChild(slider2);
-
-    // --- Progress bar ---
-    auto progressPanel = makeRef<Panel>();
-    progressPanel->setwidth(350.0f);
-    progressPanel->setheight(80.0f);
-    progressPanel->setbackground(c(35, 38, 50));
-    progressPanel->setcornerRadius(8.0f);
-    progressPanel->setborderColor(c(60, 65, 90));
-    progressPanel->setborderWidth(1.0f);
-    Canvas::setLeft(*progressPanel, 400.0f);
-    Canvas::setTop(*progressPanel, 210.0f);
-    root->addChild(progressPanel);
-
-    auto progStack = makeRef<StackPanel>();
-    progStack->setorientation(Orientation::Vertical);
-    progStack->setmargin(Thickness{16, 16, 16, 16});
-    progressPanel->addChild(progStack);
-
-    auto progLabel = makeRef<Text>();
-    progLabel->settext("Compiling Shaders...");
-    progLabel->setfontSize(14.0f);
-    progLabel->setforeground(c(180, 185, 200));
-    progStack->addChild(progLabel);
-
-    auto progress = makeRef<ProgressBar>();
-    progress->setwidth(300.0f);
-    progress->setvalue(42.0f);
-    progress->setmargin(Thickness{0, 8, 0, 0});
-    progStack->addChild(progress);
-
-    // --- TextBox ---
-    auto textBoxPanel = makeRef<Panel>();
-    textBoxPanel->setwidth(350.0f);
-    textBoxPanel->setheight(80.0f);
-    textBoxPanel->setbackground(c(35, 38, 50));
-    textBoxPanel->setcornerRadius(8.0f);
-    textBoxPanel->setborderColor(c(60, 65, 90));
-    textBoxPanel->setborderWidth(1.0f);
-    Canvas::setLeft(*textBoxPanel, 400.0f);
-    Canvas::setTop(*textBoxPanel, 310.0f);
-    root->addChild(textBoxPanel);
-
-    auto tbStack = makeRef<StackPanel>();
-    tbStack->setorientation(Orientation::Vertical);
-    tbStack->setmargin(Thickness{16, 16, 16, 16});
-    textBoxPanel->addChild(tbStack);
-
-    auto tbLabel = makeRef<Text>();
-    tbLabel->settext("Server Address");
-    tbLabel->setfontSize(14.0f);
-    tbLabel->setforeground(c(180, 185, 200));
-    tbStack->addChild(tbLabel);
-
-    auto textBox = makeRef<TextBox>();
-    textBox->setwidth(300.0f);
-    textBox->setplaceholder("127.0.0.1:7777");
-    textBox->setmargin(Thickness{0, 6, 0, 0});
-    tbStack->addChild(textBox);
-
-    // --- Transforms panel ---
-    auto transformPanel = makeRef<Panel>();
-    transformPanel->setwidth(350.0f);
-    transformPanel->setheight(350.0f);
-    transformPanel->setbackground(c(35, 38, 50));
-    transformPanel->setcornerRadius(8.0f);
-    transformPanel->setborderColor(c(60, 65, 90));
-    transformPanel->setborderWidth(1.0f);
-    Canvas::setLeft(*transformPanel, 400.0f);
-    Canvas::setTop(*transformPanel, 410.0f);
-    root->addChild(transformPanel);
-
-    {
-        auto tfStack = makeRef<StackPanel>();
-        tfStack->setorientation(Orientation::Vertical);
-        tfStack->setmargin(Thickness{16, 16, 16, 16});
-        transformPanel->addChild(tfStack);
-
-        auto tfTitle = makeRef<Text>();
-        tfTitle->settext("Transforms");
-        tfTitle->setfontSize(16.0f);
-        tfTitle->setforeground(c(200, 205, 220));
-        tfTitle->setmargin(Thickness{0, 0, 0, 6});
-        tfStack->addChild(tfTitle);
-
-        auto tfSub = makeRef<Text>();
-        tfSub->settext("Scale / Rotate / Skew (Flash-style)");
-        tfSub->setfontSize(12.0f);
-        tfSub->setforeground(c(140, 150, 180));
-        tfSub->setmargin(Thickness{0, 0, 0, 14});
-        tfStack->addChild(tfSub);
-
-        const float pi = 3.14159265f;
-
-        // Row 1: Rotation samples
-        auto row1 = makeRef<StackPanel>(Orientation::Horizontal);
-        row1->setspacing(20.0f);
-
-        for (auto [angle, clr, label] : std::initializer_list<std::tuple<f32, Color, const char*>>{
-                {0.0f, c(80,150,240), "0\xc2\xb0"},
-                {15.0f * pi / 180.0f, c(200,100,60), "15\xc2\xb0"},
-                {45.0f * pi / 180.0f, c(60,180,100), "45\xc2\xb0"},
-                {90.0f * pi / 180.0f, c(220,160,40), "90\xc2\xb0"}}) {
-            auto col = makeRef<StackPanel>(Orientation::Vertical);
-            col->sethorizontalAlignment(HorizontalAlignment::Center);
-            auto box = makeRef<Panel>();
-            box->setwidth(45.0f); box->setheight(45.0f);
-            box->setcornerRadius(6.0f);
-            box->setbackground(clr);
-            box->setrotation(angle);
-            col->addChild(box);
-            auto lbl = makeRef<Text>();
-            lbl->settext(label); lbl->setfontSize(10.0f);
-            lbl->setforeground(c(140, 150, 180));
-            lbl->setmargin(Thickness{0, 6, 0, 0});
-            col->addChild(lbl);
-            row1->addChild(col);
-        }
-        tfStack->addChild(row1);
-
-        // Row 2: Skew samples
-        auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
-        row2->setspacing(20.0f);
-        row2->setmargin(Thickness{0, 24, 0, 0});
-
-        for (auto [skx, sky, clr, label] : std::initializer_list<std::tuple<f32, f32, Color, const char*>>{
-                {15.0f * pi / 180.0f, 0.0f, c(150,80,200), "skX 15\xc2\xb0"},
-                {30.0f * pi / 180.0f, 0.0f, c(50,160,180), "skX 30\xc2\xb0"},
-                {0.0f, 20.0f * pi / 180.0f, c(200,60,100), "skY 20\xc2\xb0"},
-                {10.0f * pi / 180.0f, 10.0f * pi / 180.0f, c(100,180,60), "X+Y"}}) {
-            auto col = makeRef<StackPanel>(Orientation::Vertical);
-            col->sethorizontalAlignment(HorizontalAlignment::Center);
-            auto box = makeRef<Panel>();
-            box->setwidth(45.0f); box->setheight(45.0f);
-            box->setbackground(clr);
-            box->setskewX(skx); box->setskewY(sky);
-            col->addChild(box);
-            auto lbl = makeRef<Text>();
-            lbl->settext(label); lbl->setfontSize(10.0f);
-            lbl->setforeground(c(140, 150, 180));
-            lbl->setmargin(Thickness{0, 6, 0, 0});
-            col->addChild(lbl);
-            row2->addChild(col);
-        }
-        tfStack->addChild(row2);
-
-        // Row 3: Combined transforms
-        auto row3 = makeRef<StackPanel>(Orientation::Horizontal);
-        row3->setspacing(20.0f);
-        row3->setmargin(Thickness{0, 24, 0, 0});
-
-        {
-            auto col = makeRef<StackPanel>(Orientation::Vertical);
-            col->sethorizontalAlignment(HorizontalAlignment::Center);
-            auto box = makeRef<Panel>();
-            box->setwidth(55.0f); box->setheight(55.0f);
-            box->setcornerRadius(8.0f);
-            box->setbackground(c(220, 80, 120));
-            box->setscaleX(1.2f); box->setscaleY(0.8f);
-            box->setrotation(25.0f * pi / 180.0f);
-            box->setskewX(10.0f * pi / 180.0f);
-            col->addChild(box);
-            auto lbl = makeRef<Text>();
-            lbl->settext("S+R+Sk"); lbl->setfontSize(10.0f);
-            lbl->setforeground(c(140, 150, 180));
-            lbl->setmargin(Thickness{0, 6, 0, 0});
-            col->addChild(lbl);
-            row3->addChild(col);
-        }
-
-        {
-            auto btn = makeRef<Button>();
-            btn->setlabel("Rotated Btn");
-            btn->setwidth(110.0f);
-            btn->setheight(32.0f);
-            btn->setrotation(10.0f * pi / 180.0f);
-            row3->addChild(btn);
-        }
-
-        {
-            auto btn = makeRef<Button>();
-            btn->setlabel("Skewed Btn");
-            btn->setwidth(110.0f);
-            btn->setheight(32.0f);
-            btn->setskewX(12.0f * pi / 180.0f);
-            row3->addChild(btn);
-        }
-
-        tfStack->addChild(row3);
-    }
-
-    // --- Status bar ---
-    auto statusBar = makeRef<Panel>();
-    statusBar->setwidth(static_cast<f32>(g_width));
-    statusBar->setheight(32.0f);
-    statusBar->setbackground(c(25, 27, 35));
-    Canvas::setLeft(*statusBar, 0.0f);
-    Canvas::setTop(*statusBar, static_cast<f32>(g_height - 32));
-    root->addChild(statusBar);
-
-    auto statusText = makeRef<Text>();
-    statusText->settext("Gut UI Toolkit — D3D12 backend — Windows");
-    statusText->setfontSize(12.0f);
-    statusText->setforeground(c(120, 125, 140));
-    statusText->setmargin(Thickness{12, 8, 0, 0});
-    statusBar->addChild(statusText);
-
-    g_gutCtx->setRoot(root);
+    auto result = demo::buildDemoUI(*g_gutCtx, cfg);
+    g_gutCtx->setRoot(result.root);
+    g_animations = std::move(result.animations);
 }
 
 // ============================================================================
@@ -551,16 +234,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             break;
         }
         case WM_KEYUP:
-        case WM_SYSKEYUP: {
+        case WM_SYSKEYUP:
             g_gutCtx->processKey(static_cast<gut::Key>(wParam), false);
             break;
-        }
-        case WM_CHAR: {
-            if (wParam >= 32) {
+        case WM_CHAR:
+            if (wParam >= 32)
                 g_gutCtx->processTextInput(static_cast<char32_t>(wParam));
-            }
             break;
-        }
         case WM_SIZE:
             if (wParam != SIZE_MINIMIZED) {
                 g_width = LOWORD(lParam);
@@ -576,7 +256,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         PostQuitMessage(0);
         return 0;
     }
-
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
@@ -587,7 +266,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     SetProcessDPIAware();
 
-    // Register window class
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(WNDCLASSEXW);
     wc.style = CS_HREDRAW | CS_VREDRAW;
@@ -597,12 +275,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     wc.lpszClassName = L"GutD3D12Demo";
     RegisterClassExW(&wc);
 
-    // Create window
     RECT rc = { 0, 0, (LONG)g_width, (LONG)g_height };
     AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 
     HWND hwnd = CreateWindowExW(
-        0, L"GutD3D12Demo", L"Gut — D3D12 Demo",
+        0, L"GutD3D12Demo", L"Gut \xe2\x80\x94 D3D12 Demo",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
         rc.right - rc.left, rc.bottom - rc.top,
@@ -610,27 +287,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     if (!hwnd) return 1;
 
-    // DPI
     HDC hdc = GetDC(hwnd);
     g_dpi = (float)GetDeviceCaps(hdc, LOGPIXELSX) / 96.0f;
     ReleaseDC(hwnd, hdc);
 
-    // Init D3D12
     if (!InitD3D12(hwnd)) {
         MessageBoxW(hwnd, L"Failed to initialize D3D12", L"Error", MB_OK);
         return 1;
     }
 
-    // Init Gut
     gut::initialize();
     BuildUI();
 
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
 
-    // Main loop
     auto lastTime = std::chrono::high_resolution_clock::now();
-
     MSG msg{};
     while (g_running) {
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -646,12 +318,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
         g_gutCtx->update(dt);
         g_gutCtx->render(g_width, g_height);
-
-        g_swapChain->Present(1, 0);
     }
 
+    g_animations.clear();
     g_gutCtx.reset();
     gut::shutdown();
-
     return 0;
 }

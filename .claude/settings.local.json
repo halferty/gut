@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake --build:*)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" c:/proj/gu/gut/build/gut.sln -t:d3d11_demo -p:Configuration=Debug -verbosity:minimal)",
+      "Bash(\"c:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" c:/proj/gu/gut/build/gut.sln -t:d3d12_demo -p:Configuration=Debug -verbosity:minimal)",
+      "Bash(\"c:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" c:/proj/gu/gut/build/gut.sln -t:gut_tests -p:Configuration=Debug -verbosity:minimal)",
+      "Bash(\"c:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\":*)",
+      "Bash(\"/c/Program Files/CMake/bin/cmake.exe\" --build build --config Debug --target d3d12_demo)",
+      "Bash(cmd.exe /c \"where cmake\")",
+      "Bash(cmd.exe /c \"cmake --build build --config Debug --target d3d12_demo 2>&1\")",
+      "Bash(cmd.exe /c \"cd /d c:\\\\proj\\\\gu\\\\gut && cmake --version\")"
+    ]
+  }
+}

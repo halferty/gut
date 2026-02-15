@@ -71,9 +71,9 @@
 - [x] isHitTestVisible
 - [ ] Mouse drag — capture exists, no general drag-and-drop API
 - [x] Cursor styles — Element.cursor property, Context callback, NSCursor mapped on macOS
-- [~] Clipboard — TextBox uses NSPasteboard; no general API yet
+- [x] Clipboard — Context callbacks (setOnGetClipboardText/setOnSetClipboardText), TextBox Ctrl+C/V/X
 - [p] IME input — CJK composition support (PUNT)
-- [ ] Keyboard shortcuts / accelerators — global and scoped bindings
+- [p] Keyboard shortcuts / accelerators — global and scoped bindings (PUNT)
 
 ## Controls
 
@@ -97,8 +97,8 @@
 - [p] Splitter / Resizable panels (PUNT)
 - [x] Toolbar — horizontal strip with icon buttons, toggles, separators; procedural Icon system (50 icons), hover/press/toggle states
 - [x] Menu bar — horizontal bar with dropdown menus, icons, shortcut labels, disabled items, keyboard nav (Left/Right/Up/Down/Enter/Esc), hover-to-switch
-- [ ] Expander / Accordion
-- [ ] Badge / Tag
+- [p] Expander / Accordion (PUNT)
+- [p] Badge / Tag (PUNT)
 
 ## Animation
 
@@ -113,7 +113,7 @@
 - [ ] Path animation — animate along a curve
 - [ ] Layout animation — animate child add/remove/reorder
 
-## Systemii
+## System
 
 - [x] Property system — GUT_PROPERTY with change signals, one-way binding
 - [x] Ref counting — intrusive Ref\<T\>, make\<T\>()
@@ -122,9 +122,9 @@
 - [x] Styles / theming — CSS selectors, stylesheets, Theme with defaultLight/defaultDark
 - [x] Visual tree walking — findByName, findByType, recursive
 - [p] Two-way data binding — only one-way currently (PUNT)
-- [ ] Resource dictionary — no generic keyed resource store
-- [ ] Command system — ICommand-style abstraction for actions
-- [ ] Undo / redo
+- [p] Resource dictionary — no generic keyed resource store (PUNT)
+- [p] Command system — ICommand-style abstraction for actions (PUNT)
+- [p] Undo / redo (PUNT)
 - [p] Serialization — save/load UI tree from markup (PUNT)
 - [p] Debug overlay — layout inspector, render stats, FPS counter (PUNT)
 - [p] Accessibility — screen reader roles, labels, navigation (PUNT)

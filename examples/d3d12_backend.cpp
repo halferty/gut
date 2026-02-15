@@ -464,6 +464,27 @@ void D3D12RenderBackend::beginFrame(u32 width, u32 height, f32 devicePixelRatio)
     m_vertexBufferOffset = 0;
     m_indexBufferOffset = 0;
 
+    // Resize swap chain buffers if the window size changed
+    {
+        DXGI_SWAP_CHAIN_DESC1 scDesc{};
+        m_swapChain->GetDesc1(&scDesc);
+        if (scDesc.Width != width || scDesc.Height != height) {
+            waitForGpu();
+            for (u32 i = 0; i < FRAME_COUNT; i++)
+                m_renderTargets[i].Reset();
+            m_swapChain->ResizeBuffers(FRAME_COUNT, width, height,
+                                        DXGI_FORMAT_UNKNOWN, 0);
+            m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+            // Recreate RTVs
+            D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
+            for (u32 i = 0; i < FRAME_COUNT; i++) {
+                m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_renderTargets[i]));
+                m_device->CreateRenderTargetView(m_renderTargets[i].Get(), nullptr, rtvHandle);
+                rtvHandle.ptr += m_rtvDescriptorSize;
+            }
+        }
+    }
+
     auto* allocator = m_commandAllocators[m_frameIndex].Get();
     allocator->Reset();
     m_commandList->Reset(allocator, nullptr);
@@ -515,6 +536,10 @@ void D3D12RenderBackend::endFrame() {
 
     ID3D12CommandList* cmdLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(1, cmdLists);
+
+    // Present MUST happen before moveToNextFrame, because moveToNextFrame
+    // calls GetCurrentBackBufferIndex() which only updates after Present.
+    m_swapChain->Present(1, 0);
 
     moveToNextFrame();
 }
