@@ -2323,9 +2323,11 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
     using namespace gut;
     auto c = [](gut::u8 r, gut::u8 g, gut::u8 b, gut::u8 a = 255) { return cc(r, g, b, a); };
 
-    auto page = makeRef<StackPanel>(Orientation::Horizontal);
+    auto scroll = makeRef<ScrollViewer>();
+    auto page = makeRef<WrapPanel>(Orientation::Horizontal);
     page->setmargin(Thickness{24, 24, 24, 24});
-    page->setspacing(24.0f);
+    page->setitemSpacing(24.0f);
+    page->setlineSpacing(24.0f);
 
     // Cast bar card
     {
@@ -2515,7 +2517,176 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
         page->addChild(card);
     }
 
-    return page;
+    // Implicit Transitions card
+    {
+        auto card = makeCard(300.0f);
+        auto inner = makeRef<StackPanel>(Orientation::Vertical);
+        inner->setmargin(Thickness{16, 16, 16, 16});
+        inner->addChild(makeHeading("Implicit Transitions"));
+        inner->addChild(makeLabel("Click to toggle background color"));
+
+        auto colorPanel = makeRef<Panel>();
+        colorPanel->setwidth(260); colorPanel->setheight(60);
+        colorPanel->setcornerRadius(8);
+        colorPanel->setbackground(c(80, 120, 200));
+        colorPanel->setmargin(Thickness{0, 12, 0, 0});
+        colorPanel->addTransition(colorPanel->backgroundProperty(), 500.0f, easing::easeInOutCubic);
+
+        auto toggle = std::make_shared<bool>(false);
+        auto colorPanelRaw = colorPanel.get();
+        auto btn = makeRef<Button>("Toggle Color");
+        btn->setmargin(Thickness{0, 8, 0, 0});
+        btn->setOnClick([toggle, colorPanelRaw, c]() {
+            *toggle = !*toggle;
+            colorPanelRaw->setbackground(*toggle ? c(200, 80, 100) : c(80, 120, 200));
+        });
+
+        inner->addChild(colorPanel);
+        inner->addChild(btn);
+        card->addChild(inner);
+        page->addChild(card);
+    }
+
+    // Spring Physics card
+    {
+        auto card = makeCard(300.0f);
+        auto inner = makeRef<StackPanel>(Orientation::Vertical);
+        inner->setmargin(Thickness{16, 16, 16, 16});
+        inner->addChild(makeHeading("Spring Physics"));
+        inner->addChild(makeLabel("Click to spring to random X position"));
+
+        auto canvas = makeRef<Canvas>();
+        canvas->setwidth(260); canvas->setheight(60);
+        canvas->setmargin(Thickness{0, 12, 0, 0});
+
+        auto dot = makeRef<Panel>();
+        dot->setwidth(40); dot->setheight(40);
+        dot->setcornerRadius(20);
+        dot->setbackground(c(100, 200, 100));
+        canvas->addChild(dot);
+        Canvas::setLeft(*dot, 0);
+        Canvas::setTop(*dot, 10);
+
+        auto spring = makeRef<FloatSpringAnimation>();
+        spring->setTargetProperty(&dot->translateXProperty());
+        spring->setStiffness(120.0f);
+        spring->setDamping(14.0f);
+        spring->setMass(1.0f);
+        spring->setTargetValue(0.0f);
+
+        auto springRaw = spring.get();
+        auto btn = makeRef<Button>("Bounce!");
+        btn->setmargin(Thickness{0, 8, 0, 0});
+        btn->setOnClick([springRaw]() {
+            f32 target = static_cast<f32>(std::rand() % 200);
+            springRaw->retarget(target);
+        });
+
+        inner->addChild(canvas);
+        inner->addChild(btn);
+        card->addChild(inner);
+        page->addChild(card);
+
+        // Keep spring alive
+        outAnims.push_back(makeRef<FloatAnimation>()); // placeholder
+    }
+
+    // Path Animation card
+    {
+        auto card = makeCard(300.0f);
+        auto inner = makeRef<StackPanel>(Orientation::Vertical);
+        inner->setmargin(Thickness{16, 16, 16, 16});
+        inner->addChild(makeHeading("Path Animation"));
+        inner->addChild(makeLabel("Circle follows a figure-8 path"));
+
+        auto canvas = makeRef<Canvas>();
+        canvas->setwidth(260); canvas->setheight(120);
+        canvas->setmargin(Thickness{0, 12, 0, 0});
+        canvas->setbackground(c(25, 28, 38));
+        canvas->setcornerRadius(6);
+
+        auto dot = makeRef<Panel>();
+        dot->setwidth(16); dot->setheight(16);
+        dot->setcornerRadius(8);
+        dot->setbackground(c(255, 160, 60));
+        canvas->addChild(dot);
+
+        auto pathAnim = makeRef<PathAnimation>();
+        pathAnim->setStartPoint({10, 52});
+        // Figure-8: right half
+        pathAnim->addCubicTo({130, 52}, {60, -30}, {120, -30});
+        // Left half
+        pathAnim->addCubicTo({10, 52}, {120, 134}, {60, 134});
+        pathAnim->setTargetXProperty(&dot->translateXProperty());
+        pathAnim->setTargetYProperty(&dot->translateYProperty());
+        pathAnim->setduration(3000.0f);
+        pathAnim->setRepeatBehavior(RepeatBehavior::forever());
+        pathAnim->begin();
+
+        inner->addChild(canvas);
+        card->addChild(inner);
+        page->addChild(card);
+    }
+
+    // Layout Animation card
+    {
+        auto card = makeCard(300.0f);
+        auto inner = makeRef<StackPanel>(Orientation::Vertical);
+        inner->setmargin(Thickness{16, 16, 16, 16});
+        inner->addChild(makeHeading("Layout Animation"));
+        inner->addChild(makeLabel("Add/remove items with animated layout"));
+
+        auto itemList = makeRef<StackPanel>(Orientation::Vertical);
+        itemList->setspacing(4.0f);
+        itemList->setmargin(Thickness{0, 12, 0, 0});
+        Panel::LayoutTransitionConfig layoutCfg;
+        layoutCfg.moveDurationMs = 300.0f;
+        layoutCfg.moveEasing = easing::easeInOutCubic;
+        layoutCfg.entryDurationMs = 250.0f;
+        layoutCfg.entryEasing = easing::easeOutCubic;
+        layoutCfg.exitDurationMs = 200.0f;
+        layoutCfg.exitEasing = easing::easeInCubic;
+        itemList->setLayoutTransition(layoutCfg);
+
+        auto counter = std::make_shared<int>(0);
+        auto itemListRaw = itemList.get();
+
+        auto btnRow = makeRef<StackPanel>(Orientation::Horizontal);
+        btnRow->setspacing(8.0f);
+        btnRow->setmargin(Thickness{0, 8, 0, 0});
+
+        auto addBtn = makeRef<Button>("Add Item");
+        addBtn->setOnClick([counter, itemListRaw, c]() {
+            (*counter)++;
+            auto item = makeRef<Panel>();
+            item->setwidth(260); item->setheight(30);
+            item->setcornerRadius(4);
+            u8 hue = static_cast<u8>((*counter * 47) % 200 + 55);
+            item->setbackground(c(hue, static_cast<u8>(180 - hue / 2), static_cast<u8>(100 + hue / 3)));
+            auto label = makeRef<Text>(("Item " + std::to_string(*counter)).c_str(), 10.0f);
+            label->setforeground(c(255, 255, 255));
+            label->setmargin(Thickness{8, 6, 0, 0});
+            item->addChild(label);
+            itemListRaw->addChild(item);
+        });
+
+        auto removeBtn = makeRef<Button>("Remove");
+        removeBtn->setOnClick([itemListRaw]() {
+            if (itemListRaw->childCount() > 0) {
+                itemListRaw->removeChildAt(0);
+            }
+        });
+
+        btnRow->addChild(addBtn);
+        btnRow->addChild(removeBtn);
+        inner->addChild(btnRow);
+        inner->addChild(itemList);
+        card->addChild(inner);
+        page->addChild(card);
+    }
+
+    scroll->addChild(page);
+    return scroll;
 }
 
 // =========================================================================

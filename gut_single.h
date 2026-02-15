@@ -307,6 +307,7 @@ struct Color {
     
     constexpr Color operator*(f32 scalar) const { return {r * scalar, g * scalar, b * scalar, a}; }
     constexpr Color operator+(const Color& other) const { return {r + other.r, g + other.g, b + other.b, a + other.a}; }
+    constexpr Color operator-(const Color& other) const { return {r - other.r, g - other.g, b - other.b, a - other.a}; }
     
     constexpr bool operator==(const Color&) const = default;
     
@@ -3084,18 +3085,18 @@ protected:
         
         if (!before && !after) return;
         if (!before) {
-            m_targetProperty->setValue(after->value);
+            m_targetProperty->set(after->value);
             return;
         }
         if (!after || before == after) {
-            m_targetProperty->setValue(before->value);
+            m_targetProperty->set(before->value);
             return;
         }
-        
+
         // Interpolate between keyframes
         f32 segmentProgress = (t - before->keyTime) / (after->keyTime - before->keyTime);
         T interpolated = lerp(before->value, after->value, segmentProgress);
-        m_targetProperty->setValue(interpolated);
+        m_targetProperty->set(interpolated);
     }
     
 private:
@@ -3105,6 +3106,138 @@ private:
     
     Property<T>* m_targetProperty = nullptr;
     std::vector<KeyFrame<T>> m_keyFrames;
+};
+
+/// Physics-based spring animation that simulates mass-spring-damper system
+template<typename T>
+class SpringAnimation : public Animation {
+    GUT_OBJECT(SpringAnimation, Animation)
+
+public:
+    SpringAnimation() = default;
+
+    void setTargetProperty(Property<T>* prop) { m_prop = prop; }
+    Property<T>* targetProperty() const { return m_prop; }
+
+    void setInitialValue(T value) { m_initial = value; m_hasInitial = true; }
+    void setTargetValue(T value) { m_target = value; }
+    T targetValue() const { return m_target; }
+
+    /// Retarget mid-flight, preserving velocity for smooth redirection
+    void retarget(T newTarget) {
+        m_target = newTarget;
+        if (m_state != AnimationState::Playing) {
+            begin();
+        }
+    }
+
+    void setMass(f32 m) { m_mass = m; }
+    void setStiffness(f32 k) { m_stiffness = k; }
+    void setDamping(f32 c) { m_damping = c; }
+    void setRestThreshold(f32 t) { m_restThreshold = t; }
+
+    f32 mass() const { return m_mass; }
+    f32 stiffness() const { return m_stiffness; }
+    f32 damping() const { return m_damping; }
+
+    void update(f32 deltaMs) override;
+
+protected:
+    void applyValue(f32) override {} // unused, physics drives directly
+
+private:
+    static f32 springMagnitude(f32 v) { return std::abs(v); }
+    static f32 springMagnitude(Point2f v) { return std::sqrt(v.x * v.x + v.y * v.y); }
+    static f32 springMagnitude(Color v) { return std::abs(v.r) + std::abs(v.g) + std::abs(v.b) + std::abs(v.a); }
+
+    Property<T>* m_prop = nullptr;
+    T m_current{};
+    T m_target{};
+    T m_velocity{};
+    T m_initial{};
+    bool m_hasInitial = false;
+    bool m_initialized = false;
+    f32 m_mass = 1.0f;
+    f32 m_stiffness = 170.0f;
+    f32 m_damping = 26.0f;
+    f32 m_restThreshold = 0.01f;
+};
+
+using FloatSpringAnimation = SpringAnimation<f32>;
+using PointSpringAnimation = SpringAnimation<Point2f>;
+using ColorSpringAnimation = SpringAnimation<Color>;
+
+/// Segment of a path for PathAnimation
+struct AnimPathSegment {
+    enum Type { LineTo, CubicTo };
+    Type type;
+    Point2f endPoint;
+    Point2f control1, control2; // only for CubicTo
+};
+
+/// Animates a point along a path defined by line and cubic bezier segments
+class GUT_API PathAnimation : public Animation {
+    GUT_OBJECT(PathAnimation, Animation)
+
+public:
+    PathAnimation() = default;
+
+    void setStartPoint(Point2f p) { m_start = p; m_tableDirty = true; }
+    void addLineTo(Point2f p) { m_segments.push_back({AnimPathSegment::LineTo, p, {}, {}}); m_tableDirty = true; }
+    void addCubicTo(Point2f end, Point2f c1, Point2f c2) { m_segments.push_back({AnimPathSegment::CubicTo, end, c1, c2}); m_tableDirty = true; }
+    void clearPath() { m_segments.clear(); m_arcLengths.clear(); m_tableDirty = true; }
+
+    void setTargetXProperty(Property<f32>* px) { m_propX = px; }
+    void setTargetYProperty(Property<f32>* py) { m_propY = py; }
+    void setPositionCallback(std::function<void(Point2f)> cb) { m_callback = std::move(cb); }
+
+protected:
+    void applyValue(f32 t) override;
+
+private:
+    void buildArcLengthTable();
+    Point2f sampleAt(f32 t);
+    Point2f evaluateCubic(Point2f p0, Point2f p1, Point2f p2, Point2f p3, f32 t);
+
+    Point2f m_start{};
+    std::vector<AnimPathSegment> m_segments;
+    std::vector<f32> m_arcLengths; // cumulative arc lengths
+    bool m_tableDirty = true;
+    Property<f32>* m_propX = nullptr;
+    Property<f32>* m_propY = nullptr;
+    std::function<void(Point2f)> m_callback;
+};
+
+/// Configuration for implicit property transitions
+struct TransitionConfig {
+    f32 durationMs = 300.0f;
+    EasingFunction easing = nullptr;
+    f32 delayMs = 0.0f;
+};
+
+/// Base class for transition bindings (type-erased)
+class TransitionBindingBase {
+public:
+    virtual ~TransitionBindingBase() = default;
+    virtual void stop() = 0;
+};
+
+/// Binds a Property<T> to auto-animate on value changes
+template<typename T>
+class TransitionBinding : public TransitionBindingBase {
+public:
+    TransitionBinding(Property<T>* prop, TransitionConfig config);
+    ~TransitionBinding() override;
+    void stop() override;
+
+private:
+    void onChanged(const T& newVal, const T& oldVal);
+
+    Property<T>* m_prop;
+    TransitionConfig m_config;
+    Ref<PropertyAnimation<T>> m_anim;
+    bool m_suppress = false;
+    ScopedConnection m_conn;
 };
 
 /// Storyboard groups multiple animations together
@@ -3950,6 +4083,8 @@ public:
     GUT_PROPERTY(f32, rotation, 0.0f)
     GUT_PROPERTY(f32, skewX, 0.0f)
     GUT_PROPERTY(f32, skewY, 0.0f)
+    GUT_PROPERTY(f32, translateX, 0.0f)
+    GUT_PROPERTY(f32, translateY, 0.0f)
     GUT_PROPERTY(bool, isEnabled, true)
     GUT_PROPERTY(i32, zIndex, 0)
     GUT_PROPERTY(bool, clipToBounds, false)
@@ -4170,7 +4305,10 @@ protected:
      * @param ctx The render context.
      */
     virtual void onRender(RenderContext& ctx);
-    
+
+    /// Called after arrangeOverride completes. Panel overrides for layout animation.
+    virtual void onArrangeComplete() {}
+
     /**
      * @brief Get corner radius for clipping. Override in Panel.
      */
@@ -4214,6 +4352,34 @@ protected:
     Context* context() const { return m_context; }
     void setContext(Context* ctx);
 
+public:
+    // -------------------------------------------------------------------------
+    // Implicit transitions
+    // -------------------------------------------------------------------------
+
+    /// Add an implicit transition that auto-animates property changes
+    template<typename T>
+    void addTransition(Property<T>& prop, f32 durationMs, EasingFunction easing = nullptr, f32 delayMs = 0) {
+        removeTransition(&prop);
+        TransitionConfig config{durationMs, std::move(easing), delayMs};
+        m_transitions[static_cast<void*>(&prop)] = std::make_unique<TransitionBinding<T>>(&prop, config);
+    }
+
+    /// Remove a transition for a specific property
+    void removeTransition(void* propertyAddr) {
+        auto it = m_transitions.find(propertyAddr);
+        if (it != m_transitions.end()) {
+            it->second->stop();
+            m_transitions.erase(it);
+        }
+    }
+
+    /// Remove all transitions
+    void clearTransitions() {
+        for (auto& [_, binding] : m_transitions) binding->stop();
+        m_transitions.clear();
+    }
+
 private:
     Element* m_parent{nullptr};
     Context* m_context{nullptr};
@@ -4232,6 +4398,7 @@ private:
     Signal<DragDropEvent&> m_dragOver;
     Signal<> m_dragLeave;
     Signal<DragDropEvent&> m_drop;
+    std::unordered_map<void*, std::unique_ptr<TransitionBindingBase>> m_transitions;
 };
 
 } // namespace gut
@@ -4306,7 +4473,26 @@ public:
     GUT_PROPERTY(Color, backdropTint, Color::transparent())
     
     void setOnClick(std::function<void()> callback) { m_onClick = std::move(callback); }
-    
+
+    // -------------------------------------------------------------------------
+    // Layout animation
+    // -------------------------------------------------------------------------
+
+    struct LayoutTransitionConfig {
+        f32 moveDurationMs = 300.0f;
+        EasingFunction moveEasing = nullptr;
+        f32 entryDurationMs = 250.0f;
+        EasingFunction entryEasing = nullptr;
+        f32 exitDurationMs = 200.0f;
+        EasingFunction exitEasing = nullptr;
+        bool animateEntry = true;
+        bool animateExit = true;
+        bool animateMove = true;
+    };
+
+    void setLayoutTransition(LayoutTransitionConfig config) { m_layoutTransition = std::move(config); }
+    void clearLayoutTransition() { m_layoutTransition.reset(); }
+
     // -------------------------------------------------------------------------
     // Child management
     // -------------------------------------------------------------------------
@@ -4366,9 +4552,16 @@ protected:
      */
     virtual void renderChildren(RenderContext& ctx);
     
+    void onArrangeComplete() override;
+    void snapshotChildBounds();
+
     std::vector<Ref<Element>> m_children;
     Ref<Brush> m_backgroundBrush;
     std::function<void()> m_onClick;
+    std::optional<LayoutTransitionConfig> m_layoutTransition;
+    std::unordered_map<Element*, Rectf> m_prevChildBounds;
+    std::vector<Ref<Element>> m_departingChildren;
+    std::vector<Ref<Animation>> m_layoutAnims;
 };
 
 } // namespace gut
@@ -16058,6 +16251,216 @@ void Storyboard::update(f32 deltaMs) {
     }
 }
 
+// SpringAnimation implementation
+
+template<typename T>
+void SpringAnimation<T>::update(f32 deltaMs) {
+    if (m_state != AnimationState::Playing) return;
+
+    // Apply speed ratio and begin time delay
+    deltaMs *= speedRatio();
+    if (m_totalElapsed < beginTime()) {
+        m_totalElapsed += deltaMs;
+        if (m_totalElapsed < beginTime()) return;
+        deltaMs = m_totalElapsed - beginTime();
+    }
+
+    if (!m_initialized) {
+        m_current = m_hasInitial ? m_initial : (m_prop ? m_prop->get() : T{});
+        m_velocity = T{};
+        m_initialized = true;
+    }
+
+    // Semi-implicit Euler integration (dt in seconds)
+    f32 dt = deltaMs * 0.001f;
+    // Substep for stability
+    const int steps = std::max(1, static_cast<int>(dt / 0.001f));
+    f32 subDt = dt / static_cast<f32>(steps);
+
+    for (int i = 0; i < steps; ++i) {
+        T displacement = m_current - m_target;
+        T springForce = displacement * (-m_stiffness);
+        T dampingForce = m_velocity * (-m_damping);
+        T acceleration = (springForce + dampingForce) * (1.0f / m_mass);
+        m_velocity = m_velocity + acceleration * subDt;
+        m_current = m_current + m_velocity * subDt;
+    }
+
+    if (m_prop) {
+        m_prop->set(m_current);
+    }
+
+    // Check if settled
+    T displacement = m_current - m_target;
+    if (springMagnitude(displacement) < m_restThreshold &&
+        springMagnitude(m_velocity) < m_restThreshold) {
+        m_current = m_target;
+        if (m_prop) m_prop->set(m_current);
+        m_state = AnimationState::Stopped;
+        m_initialized = false;
+        Timeline::global()->remove(this);
+        completed.emit();
+        return;
+    }
+
+    m_totalElapsed += deltaMs;
+}
+
+// Explicit template instantiations for SpringAnimation
+template class SpringAnimation<f32>;
+template class SpringAnimation<Point2f>;
+template class SpringAnimation<Color>;
+
+// PathAnimation implementation
+
+Point2f PathAnimation::evaluateCubic(Point2f p0, Point2f p1, Point2f p2, Point2f p3, f32 t) {
+    f32 u = 1.0f - t;
+    f32 uu = u * u;
+    f32 tt = t * t;
+    return Point2f{
+        uu * u * p0.x + 3.0f * uu * t * p1.x + 3.0f * u * tt * p2.x + tt * t * p3.x,
+        uu * u * p0.y + 3.0f * uu * t * p1.y + 3.0f * u * tt * p2.y + tt * t * p3.y
+    };
+}
+
+void PathAnimation::buildArcLengthTable() {
+    m_arcLengths.clear();
+    if (m_segments.empty()) { m_tableDirty = false; return; }
+
+    const int samplesPerSegment = 200;
+    m_arcLengths.reserve(m_segments.size() * samplesPerSegment + 1);
+    m_arcLengths.push_back(0.0f);
+
+    Point2f prev = m_start;
+    f32 totalLength = 0.0f;
+
+    for (auto& seg : m_segments) {
+        Point2f segStart = prev;
+        for (int i = 1; i <= samplesPerSegment; ++i) {
+            f32 st = static_cast<f32>(i) / static_cast<f32>(samplesPerSegment);
+            Point2f p;
+            if (seg.type == AnimPathSegment::LineTo) {
+                p = {segStart.x + (seg.endPoint.x - segStart.x) * st,
+                     segStart.y + (seg.endPoint.y - segStart.y) * st};
+            } else {
+                p = evaluateCubic(segStart, seg.control1, seg.control2, seg.endPoint, st);
+            }
+            f32 dx = p.x - prev.x;
+            f32 dy = p.y - prev.y;
+            totalLength += std::sqrt(dx * dx + dy * dy);
+            m_arcLengths.push_back(totalLength);
+            prev = p;
+        }
+    }
+
+    m_tableDirty = false;
+}
+
+Point2f PathAnimation::sampleAt(f32 t) {
+    if (m_tableDirty) buildArcLengthTable();
+    if (m_arcLengths.empty() || m_segments.empty()) return m_start;
+
+    f32 targetLength = t * m_arcLengths.back();
+
+    // Binary search for the segment
+    auto it = std::lower_bound(m_arcLengths.begin(), m_arcLengths.end(), targetLength);
+    usize idx = static_cast<usize>(it - m_arcLengths.begin());
+    if (idx == 0) return m_start;
+    if (idx >= m_arcLengths.size()) idx = m_arcLengths.size() - 1;
+
+    // Interpolate within the sample interval
+    f32 lenBefore = m_arcLengths[idx - 1];
+    f32 lenAfter = m_arcLengths[idx];
+    f32 frac = (lenAfter > lenBefore) ? (targetLength - lenBefore) / (lenAfter - lenBefore) : 0.0f;
+
+    const int samplesPerSegment = 200;
+    usize globalSample = idx - 1; // 0-based sample index
+    usize segIdx = globalSample / static_cast<usize>(samplesPerSegment);
+    usize sampleInSeg = globalSample % static_cast<usize>(samplesPerSegment);
+
+    if (segIdx >= m_segments.size()) segIdx = m_segments.size() - 1;
+
+    f32 t0 = static_cast<f32>(sampleInSeg) / static_cast<f32>(samplesPerSegment);
+    f32 t1 = static_cast<f32>(sampleInSeg + 1) / static_cast<f32>(samplesPerSegment);
+    f32 st = t0 + (t1 - t0) * frac;
+
+    // Find segment start point
+    Point2f segStart = m_start;
+    for (usize i = 0; i < segIdx; ++i) segStart = m_segments[i].endPoint;
+
+    auto& seg = m_segments[segIdx];
+    if (seg.type == AnimPathSegment::LineTo) {
+        return {segStart.x + (seg.endPoint.x - segStart.x) * st,
+                segStart.y + (seg.endPoint.y - segStart.y) * st};
+    } else {
+        return evaluateCubic(segStart, seg.control1, seg.control2, seg.endPoint, st);
+    }
+}
+
+void PathAnimation::applyValue(f32 t) {
+    Point2f p = sampleAt(t);
+    if (m_propX) m_propX->set(p.x);
+    if (m_propY) m_propY->set(p.y);
+    if (m_callback) m_callback(p);
+}
+
+// TransitionBinding implementation
+
+template<typename T>
+TransitionBinding<T>::TransitionBinding(Property<T>* prop, TransitionConfig config)
+    : m_prop(prop), m_config(std::move(config))
+{
+    auto conn = m_prop->changed().connect([this](const T& newVal, const T& oldVal) {
+        onChanged(newVal, oldVal);
+    });
+    m_conn = ScopedConnection(m_prop->changed(), conn);
+}
+
+template<typename T>
+TransitionBinding<T>::~TransitionBinding() {
+    stop();
+}
+
+template<typename T>
+void TransitionBinding<T>::stop() {
+    if (m_anim) {
+        m_anim->stop();
+        m_anim.reset();
+    }
+}
+
+template<typename T>
+void TransitionBinding<T>::onChanged(const T& newVal, const T& oldVal) {
+    if (m_suppress) return;
+
+    // Stop any in-progress animation
+    T currentAnimatedVal = oldVal;
+    if (m_anim && m_anim->state() == AnimationState::Playing) {
+        currentAnimatedVal = m_prop->get(); // capture where we currently are
+        m_anim->stop();
+    }
+
+    // Revert property to animated start value
+    m_suppress = true;
+    m_prop->set(currentAnimatedVal);
+    m_suppress = false;
+
+    // Create new animation from current to target
+    m_anim = makeRef<PropertyAnimation<T>>();
+    m_anim->setTargetProperty(m_prop);
+    m_anim->setFrom(currentAnimatedVal);
+    m_anim->setTo(newVal);
+    m_anim->setduration(m_config.durationMs);
+    if (m_config.easing) m_anim->setEasingFunction(m_config.easing);
+    if (m_config.delayMs > 0) m_anim->setbeginTime(m_config.delayMs);
+    m_anim->begin();
+}
+
+// Explicit template instantiations for TransitionBinding
+template class TransitionBinding<f32>;
+template class TransitionBinding<Color>;
+template class TransitionBinding<Point2f>;
+
 } // namespace gut
 
 
@@ -17749,9 +18152,10 @@ void Element::arrange(Rectf finalRect) {
     
     // Call subclass implementation
     Size2f actualSize = arrangeOverride({finalWidth, finalHeight});
-    
+
     m_bounds = {x, y, actualSize.width, actualSize.height};
     m_layoutDirty = false;
+    onArrangeComplete();
 }
 
 void Element::invalidateLayout() {
@@ -17771,7 +18175,7 @@ void Element::render(RenderContext& ctx) {
     }
     
     ctx.save();
-    ctx.translate(m_bounds.x, m_bounds.y);
+    ctx.translate(m_bounds.x + translateX(), m_bounds.y + translateY());
     ctx.setOpacity(ctx.opacity() * opacity());
 
     // Apply per-element transforms around element centre
@@ -17850,8 +18254,8 @@ Element* Element::hitTest(Point2f point) {
     for (isize i = static_cast<isize>(childCount()) - 1; i >= 0; --i) {
         if (auto* child = childAt(static_cast<usize>(i))) {
             Point2f localPoint = {
-                point.x - child->m_bounds.x,
-                point.y - child->m_bounds.y
+                point.x - child->m_bounds.x - child->translateX(),
+                point.y - child->m_bounds.y - child->translateY()
             };
             if (auto* hit = child->hitTest(localPoint)) {
                 return hit;
@@ -17979,10 +18383,57 @@ void Panel::insertChild(usize index, Ref<Element> child) {
 bool Panel::removeChild(Element* child) {
     auto it = std::find_if(m_children.begin(), m_children.end(),
         [child](const Ref<Element>& e) { return e.get() == child; });
-    
+
     if (it != m_children.end()) {
-        (*it)->setParent(nullptr);
+        Ref<Element> childRef = *it;
         m_children.erase(it);
+
+        if (m_layoutTransition && m_layoutTransition->animateExit) {
+            // Animate exit: keep child in departing list
+            auto& cfg = *m_layoutTransition;
+            auto opacityAnim = makeRef<PropertyAnimation<f32>>();
+            opacityAnim->setTargetProperty(&childRef->opacityProperty());
+            opacityAnim->setFrom(childRef->opacity());
+            opacityAnim->setTo(0.0f);
+            opacityAnim->setduration(cfg.exitDurationMs);
+            if (cfg.exitEasing) opacityAnim->setEasingFunction(cfg.exitEasing);
+
+            auto scaleXAnim = makeRef<PropertyAnimation<f32>>();
+            scaleXAnim->setTargetProperty(&childRef->scaleXProperty());
+            scaleXAnim->setFrom(childRef->scaleX());
+            scaleXAnim->setTo(0.8f);
+            scaleXAnim->setduration(cfg.exitDurationMs);
+            if (cfg.exitEasing) scaleXAnim->setEasingFunction(cfg.exitEasing);
+
+            auto scaleYAnim = makeRef<PropertyAnimation<f32>>();
+            scaleYAnim->setTargetProperty(&childRef->scaleYProperty());
+            scaleYAnim->setFrom(childRef->scaleY());
+            scaleYAnim->setTo(0.8f);
+            scaleYAnim->setduration(cfg.exitDurationMs);
+            if (cfg.exitEasing) scaleYAnim->setEasingFunction(cfg.exitEasing);
+
+            m_departingChildren.push_back(childRef);
+            Element* rawChild = childRef.get();
+
+            opacityAnim->completed.connect([this, rawChild]() {
+                auto dit = std::find_if(m_departingChildren.begin(), m_departingChildren.end(),
+                    [rawChild](const Ref<Element>& e) { return e.get() == rawChild; });
+                if (dit != m_departingChildren.end()) {
+                    (*dit)->setParent(nullptr);
+                    m_departingChildren.erase(dit);
+                }
+            });
+
+            m_layoutAnims.push_back(opacityAnim);
+            m_layoutAnims.push_back(scaleXAnim);
+            m_layoutAnims.push_back(scaleYAnim);
+            opacityAnim->begin();
+            scaleXAnim->begin();
+            scaleYAnim->begin();
+        } else {
+            childRef->setParent(nullptr);
+        }
+
         invalidateLayout();
         return true;
     }
@@ -18188,6 +18639,103 @@ void Panel::renderChildren(RenderContext& ctx) {
         }
         child->render(ctx);
     }
+    // Render departing children (exit animation in progress)
+    for (auto& child : m_departingChildren) {
+        child->render(ctx);
+    }
+}
+
+void Panel::snapshotChildBounds() {
+    m_prevChildBounds.clear();
+    for (auto& child : m_children) {
+        m_prevChildBounds[child.get()] = child->bounds();
+    }
+}
+
+void Panel::onArrangeComplete() {
+    if (!m_layoutTransition) {
+        // Still snapshot for when transitions get enabled
+        snapshotChildBounds();
+        return;
+    }
+
+    auto& cfg = *m_layoutTransition;
+
+    // Clean up completed layout animations
+    m_layoutAnims.erase(
+        std::remove_if(m_layoutAnims.begin(), m_layoutAnims.end(),
+            [](const Ref<Animation>& a) { return a->state() == AnimationState::Stopped; }),
+        m_layoutAnims.end());
+
+    for (auto& child : m_children) {
+        auto prevIt = m_prevChildBounds.find(child.get());
+
+        if (prevIt == m_prevChildBounds.end()) {
+            // New child — entry animation
+            if (cfg.animateEntry) {
+                auto opacityAnim = makeRef<PropertyAnimation<f32>>();
+                opacityAnim->setTargetProperty(&child->opacityProperty());
+                opacityAnim->setFrom(0.0f);
+                opacityAnim->setTo(1.0f);
+                opacityAnim->setduration(cfg.entryDurationMs);
+                if (cfg.entryEasing) opacityAnim->setEasingFunction(cfg.entryEasing);
+
+                auto scaleXAnim = makeRef<PropertyAnimation<f32>>();
+                scaleXAnim->setTargetProperty(&child->scaleXProperty());
+                scaleXAnim->setFrom(0.8f);
+                scaleXAnim->setTo(1.0f);
+                scaleXAnim->setduration(cfg.entryDurationMs);
+                if (cfg.entryEasing) scaleXAnim->setEasingFunction(cfg.entryEasing);
+
+                auto scaleYAnim = makeRef<PropertyAnimation<f32>>();
+                scaleYAnim->setTargetProperty(&child->scaleYProperty());
+                scaleYAnim->setFrom(0.8f);
+                scaleYAnim->setTo(1.0f);
+                scaleYAnim->setduration(cfg.entryDurationMs);
+                if (cfg.entryEasing) scaleYAnim->setEasingFunction(cfg.entryEasing);
+
+                m_layoutAnims.push_back(opacityAnim);
+                m_layoutAnims.push_back(scaleXAnim);
+                m_layoutAnims.push_back(scaleYAnim);
+                opacityAnim->begin();
+                scaleXAnim->begin();
+                scaleYAnim->begin();
+            }
+        } else if (cfg.animateMove) {
+            // Existing child — check if position changed
+            auto& oldBounds = prevIt->second;
+            auto& newBounds = child->bounds();
+            f32 dx = oldBounds.x - newBounds.x;
+            f32 dy = oldBounds.y - newBounds.y;
+
+            if (std::abs(dx) > 0.5f || std::abs(dy) > 0.5f) {
+                // Set translate offset to make it appear at old position
+                child->settranslateX(dx);
+                child->settranslateY(dy);
+
+                auto txAnim = makeRef<PropertyAnimation<f32>>();
+                txAnim->setTargetProperty(&child->translateXProperty());
+                txAnim->setFrom(dx);
+                txAnim->setTo(0.0f);
+                txAnim->setduration(cfg.moveDurationMs);
+                if (cfg.moveEasing) txAnim->setEasingFunction(cfg.moveEasing);
+
+                auto tyAnim = makeRef<PropertyAnimation<f32>>();
+                tyAnim->setTargetProperty(&child->translateYProperty());
+                tyAnim->setFrom(dy);
+                tyAnim->setTo(0.0f);
+                tyAnim->setduration(cfg.moveDurationMs);
+                if (cfg.moveEasing) tyAnim->setEasingFunction(cfg.moveEasing);
+
+                m_layoutAnims.push_back(txAnim);
+                m_layoutAnims.push_back(tyAnim);
+                txAnim->begin();
+                tyAnim->begin();
+            }
+        }
+    }
+
+    snapshotChildBounds();
 }
 
 } // namespace gut

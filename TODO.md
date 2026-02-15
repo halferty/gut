@@ -69,7 +69,7 @@
 - [x] Focus system — tab navigation, focus scope, focus visual
 - [x] Hit testing — zIndex-sorted
 - [x] isHitTestVisible
-- [ ] Mouse drag — capture exists, no general drag-and-drop API
+- [x] Mouse drag — DragDropManager, DragData payload, drop target interface, drag preview overlay
 - [x] Cursor styles — Element.cursor property, Context callback, NSCursor mapped on macOS
 - [x] Clipboard — Context callbacks (setOnGetClipboardText/setOnSetClipboardText), TextBox Ctrl+C/V/X
 - [p] IME input — CJK composition support (PUNT)
