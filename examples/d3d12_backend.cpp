@@ -463,6 +463,10 @@ void D3D12RenderBackend::beginFrame(u32 width, u32 height, f32 devicePixelRatio)
     m_devicePixelRatio = devicePixelRatio;
     m_vertexBufferOffset = 0;
     m_indexBufferOffset = 0;
+    m_frameActive = false;
+
+    // Skip rendering if window has zero size
+    if (width == 0 || height == 0) return;
 
     // Resize swap chain buffers if the window size changed
     {
@@ -472,9 +476,13 @@ void D3D12RenderBackend::beginFrame(u32 width, u32 height, f32 devicePixelRatio)
             waitForGpu();
             for (u32 i = 0; i < FRAME_COUNT; i++)
                 m_renderTargets[i].Reset();
-            m_swapChain->ResizeBuffers(FRAME_COUNT, width, height,
-                                        DXGI_FORMAT_UNKNOWN, 0);
+            HRESULT hr = m_swapChain->ResizeBuffers(FRAME_COUNT, width, height,
+                                                     DXGI_FORMAT_UNKNOWN, 0);
+            if (FAILED(hr)) return;
             m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+            // Reset fence values — after waitForGpu all work is done
+            for (u32 i = 0; i < FRAME_COUNT; i++)
+                m_fenceValues[i] = m_fenceValues[m_frameIndex];
             // Recreate RTVs
             D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
             for (u32 i = 0; i < FRAME_COUNT; i++) {
@@ -520,9 +528,12 @@ void D3D12RenderBackend::beginFrame(u32 width, u32 height, f32 devicePixelRatio)
     // Set descriptor heaps
     ID3D12DescriptorHeap* heaps[] = { m_srvHeap.Get() };
     m_commandList->SetDescriptorHeaps(1, heaps);
+
+    m_frameActive = true;
 }
 
 void D3D12RenderBackend::endFrame() {
+    if (!m_frameActive) return;
     // Transition render target to PRESENT state
     D3D12_RESOURCE_BARRIER barrier{};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -553,7 +564,7 @@ void D3D12RenderBackend::render(
     std::span<const u32> indices,
     std::span<const DrawCommand> commands)
 {
-    if (commands.empty()) return;
+    if (commands.empty() || !m_frameActive) return;
 
     u32 fi = m_frameIndex;
 

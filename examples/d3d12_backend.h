@@ -161,6 +161,7 @@ private:
 
     size_t m_vertexBufferOffset{0};
     size_t m_indexBufferOffset{0};
+    bool m_frameActive{false};
 
     // Clip state
     struct alignas(256) FrameConstants {

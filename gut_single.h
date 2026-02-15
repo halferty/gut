@@ -2259,6 +2259,61 @@ struct GUT_API MouseEvent {
     bool hasAlt() const { return hasModifier(modifiers, ModifierKeys::Alt); }
 };
 
+// ============================================================================
+// Drag-and-Drop types
+// ============================================================================
+
+/**
+ * @brief Describes the effect of a drop operation.
+ */
+enum class DragDropEffect : u8 {
+    None = 0,
+    Move = 1,
+    Copy = 2,
+};
+
+/**
+ * @brief Payload carried during a drag-and-drop operation.
+ *
+ * Holds a format string (e.g., "item", "spell", "action_slot") and
+ * an arbitrary value via std::any. Drop targets inspect the format
+ * to decide whether to accept.
+ */
+class GUT_API DragData {
+public:
+    DragData() = default;
+    DragData(String format, std::any value)
+        : m_format(std::move(format)), m_value(std::move(value)) {}
+
+    const String& format() const { return m_format; }
+    const std::any& value() const { return m_value; }
+
+    template<typename T>
+    const T& get() const { return std::any_cast<const T&>(m_value); }
+
+    template<typename T>
+    const T* tryGet() const { return std::any_cast<const T>(&m_value); }
+
+    bool hasData() const { return m_value.has_value(); }
+
+private:
+    String m_format;
+    std::any m_value;
+};
+
+/**
+ * @brief Event data delivered to drag sources and drop targets.
+ */
+struct GUT_API DragDropEvent {
+    const DragData& data;
+    Point2f screenPosition{};
+    Point2f position{};             // Target-local coordinates
+    ModifierKeys modifiers{ModifierKeys::None};
+    DragDropEffect effect{DragDropEffect::Move};
+    bool accepted{false};
+    Element* source{nullptr};
+};
+
 } // namespace gut
 
 
@@ -2582,6 +2637,7 @@ public:
     void setDoubleClickDistance(f32 distance) { m_doubleClickDistance = distance; }
 
 private:
+    friend class DragDropManager;
     void updateHoveredElement();
     MouseEvent createMouseEvent(MouseEventType type, MouseButton button = MouseButton::None);
     KeyEvent createKeyEvent(KeyEventType type, Key key);
@@ -2611,6 +2667,92 @@ private:
     Point2f m_lastClickPosition{};
     MouseButton m_lastClickButton{MouseButton::None};
     u32 m_clickCount{0};
+};
+
+// ============================================================================
+// Drag-and-Drop manager
+// ============================================================================
+
+class Context; // forward
+
+/**
+ * @brief Represents an active drag-and-drop operation.
+ * Internal to DragDropManager — not created by user code.
+ */
+class GUT_API DragOperation {
+    GUT_NONCOPYABLE(DragOperation)
+public:
+    using PreviewRenderer = std::function<void(RenderContext&, Point2f screenPos)>;
+
+    DragOperation(Element* source, DragData data, Point2f startPos)
+        : m_source(source), m_data(std::move(data)), m_startPos(startPos), m_currentPos(startPos) {}
+
+    Element*            source()        const { return m_source; }
+    const DragData&     data()          const { return m_data; }
+    Point2f             startPos()      const { return m_startPos; }
+    Point2f             currentPos()    const { return m_currentPos; }
+    DragDropEffect      effect()        const { return m_effect; }
+    Element*            currentTarget() const { return m_currentTarget; }
+
+    PreviewRenderer previewRenderer;
+
+private:
+    friend class DragDropManager;
+    Element*       m_source{nullptr};
+    DragData       m_data;
+    Point2f        m_startPos{};
+    Point2f        m_currentPos{};
+    DragDropEffect m_effect{DragDropEffect::Move};
+    Element*       m_currentTarget{nullptr};
+    bool           m_lastAccepted{false};
+};
+
+/**
+ * @brief Manages drag-and-drop operations for a Context.
+ *
+ * Lifecycle:
+ *  1. User code calls beginDrag() from a mouse event handler.
+ *  2. DragDropManager registers an overlay for the preview.
+ *  3. On each mouse move, it hit-tests for drop targets and sends DragOver/DragLeave.
+ *  4. On mouse up, it sends Drop to the target (if accepted) or cancels.
+ *  5. Escape or right-click cancels the drag.
+ */
+class GUT_API DragDropManager {
+    GUT_NONCOPYABLE(DragDropManager)
+public:
+    explicit DragDropManager(Context& context);
+    ~DragDropManager();
+
+    void beginDrag(Element* source, DragData data,
+                   DragOperation::PreviewRenderer preview = nullptr);
+
+    bool isDragging() const { return m_operation != nullptr; }
+    const DragOperation* currentOperation() const { return m_operation.get(); }
+
+    void cancelDrag();
+
+    Signal<const DragData&, Element*>&  dragStarted()   { return m_dragStarted; }
+    Signal<const DragData&, Element*>&  dragCompleted()  { return m_dragCompleted; }
+    Signal<const DragData&>&            dragCancelled()  { return m_dragCancelled; }
+
+private:
+    friend class InputManager;
+
+    void handleMouseMove(Point2f screenPos, ModifierKeys mods);
+    void handleMouseUp(MouseButton button, Point2f screenPos, ModifierKeys mods);
+    void handleKeyDown(Key key);
+
+    void finishDrag(bool dropped, Element* target);
+    void renderPreview(RenderContext& ctx);
+    Element* hitTestDropTarget(Point2f screenPos);
+
+    Context& m_context;
+    std::unique_ptr<DragOperation> m_operation;
+    Ref<Panel> m_overlayOwner;
+
+    Signal<const DragData&, Element*> m_dragStarted;
+    Signal<const DragData&, Element*> m_dragCompleted;
+    Signal<const DragData&>           m_dragCancelled;
 };
 
 } // namespace gut
@@ -3990,6 +4132,20 @@ public:
     Signal<>& mouseEntered() { return m_mouseEntered; }
     Signal<>& mouseLeft() { return m_mouseLeft; }
 
+    // -------------------------------------------------------------------------
+    // Drag-and-Drop (drop target interface)
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(bool, isDropTarget, false)
+
+    virtual void onDragOver(DragDropEvent& event);
+    virtual void onDragLeave();
+    virtual void onDrop(DragDropEvent& event);
+
+    Signal<DragDropEvent&>& dragOver()  { return m_dragOver; }
+    Signal<>&               dragLeave() { return m_dragLeave; }
+    Signal<DragDropEvent&>& drop()      { return m_drop; }
+
 protected:
     // -------------------------------------------------------------------------
     // Virtual methods for subclasses
@@ -4052,6 +4208,7 @@ protected:
     friend class Tooltip;
     friend class ContextMenu;
     friend class ListView;
+    friend class DragDropManager;
 
     /// Get the owning context (set when element is added to a rooted tree)
     Context* context() const { return m_context; }
@@ -4072,6 +4229,9 @@ private:
     Signal<> m_focusLost;
     Signal<> m_mouseEntered;
     Signal<> m_mouseLeft;
+    Signal<DragDropEvent&> m_dragOver;
+    Signal<> m_dragLeave;
+    Signal<DragDropEvent&> m_drop;
 };
 
 } // namespace gut
@@ -7106,6 +7266,7 @@ public:
     
     InputManager& inputManager() { return *m_inputManager; }
     FocusManager& focusManager() { return *m_focusManager; }
+    DragDropManager& dragDropManager() { return *m_dragDropManager; }
     RenderBackend& renderBackend() { return *m_backend; }
     
     // -------------------------------------------------------------------------
@@ -7310,6 +7471,7 @@ private:
     std::unique_ptr<RenderContext> m_renderContext;
     std::unique_ptr<InputManager> m_inputManager;
     std::unique_ptr<FocusManager> m_focusManager;
+    std::unique_ptr<DragDropManager> m_dragDropManager;
     
     Ref<Element> m_root;
     Ref<Theme> m_theme;
@@ -13150,12 +13312,20 @@ void RenderContext::popClip() {
         m_currentState.hasClip = false;
         m_currentState.clipCornerRadius = 0;
     }
-    
+
     DrawCommand cmd;
-    cmd.type = DrawCommandType::ClearClip;
     cmd.vertexOffset = 0;
     cmd.indexOffset = 0;
     cmd.indexCount = 0;
+
+    if (m_currentState.hasClip) {
+        // Parent has an active clip — restore it instead of clearing
+        cmd.type = DrawCommandType::SetClip;
+        cmd.clipRect = m_currentState.clipRect;
+        cmd.clipCornerRadius = m_currentState.clipCornerRadius;
+    } else {
+        cmd.type = DrawCommandType::ClearClip;
+    }
     m_commands.push_back(cmd);
 }
 
@@ -14834,9 +15004,16 @@ InputManager::~InputManager() = default;
 void InputManager::processMouseMove(f32 x, f32 y) {
     Point2f oldPos = m_mousePosition;
     m_mousePosition = {x, y};
-    
+
+    // Delegate to drag-drop manager if a drag is active
+    if (m_context.dragDropManager().isDragging()) {
+        m_context.dragDropManager().handleMouseMove(m_mousePosition, m_modifiers);
+        updateHoveredElement();
+        return;
+    }
+
     updateHoveredElement();
-    
+
     // Send move event (bubbles up the parent chain)
     Element* target = m_capturedElement ? m_capturedElement : m_hoveredElement;
     if (target) {
@@ -14890,13 +15067,20 @@ void InputManager::processMouseButton(MouseButton button, bool pressed) {
         }
     } else {
         m_mouseButtonState &= ~buttonBit;
-        
+
+        // If dragging, mouse-up ends the drag
+        if (m_context.dragDropManager().isDragging()) {
+            m_context.dragDropManager().handleMouseUp(button, m_mousePosition, m_modifiers);
+            m_pressedElement = nullptr;
+            return;
+        }
+
         Element* target = m_capturedElement ? m_capturedElement : m_hoveredElement;
         if (target) {
             MouseEvent event = createMouseEvent(MouseEventType::ButtonUp, button);
             dispatchMouseEvent(target, event);
         }
-        
+
         m_pressedElement = nullptr;
     }
 }
@@ -14925,6 +15109,12 @@ void InputManager::processKey(Key key, bool pressed, ModifierKeys mods) {
         }
     }
     
+    // Escape cancels drag-and-drop
+    if (pressed && m_context.dragDropManager().isDragging()) {
+        m_context.dragDropManager().handleKeyDown(key);
+        if (key == Key::Escape) return;
+    }
+
     Element* target = m_context.focusManager().focusedElement();
     if (target) {
         KeyEvent event = createKeyEvent(pressed ? KeyEventType::KeyDown : KeyEventType::KeyUp, key);
@@ -15105,6 +15295,190 @@ void InputManager::dispatchKeyEvent(Element* target, KeyEvent event) {
         }
         current = current->parent();
     }
+}
+
+// ============================================================================
+// DragDropManager implementation
+// ============================================================================
+
+DragDropManager::DragDropManager(Context& context)
+    : m_context(context) {}
+
+DragDropManager::~DragDropManager() {
+    if (m_operation) {
+        finishDrag(false, nullptr);
+    }
+}
+
+void DragDropManager::beginDrag(Element* source, DragData data,
+                                 DragOperation::PreviewRenderer preview) {
+    if (m_operation) cancelDrag();
+
+    m_operation = std::make_unique<DragOperation>(
+        source, std::move(data), m_context.inputManager().mousePosition());
+    m_operation->previewRenderer = std::move(preview);
+
+    // Release any existing capture so DragDropManager owns the mouse
+    m_context.inputManager().releaseMouse();
+
+    // Register overlay for drag preview
+    if (!m_overlayOwner) {
+        m_overlayOwner = make<Panel>();
+    }
+    m_context.addOverlay(m_overlayOwner.get(), [this](RenderContext& ctx) {
+        renderPreview(ctx);
+    });
+
+    m_dragStarted.emit(m_operation->data(), source);
+}
+
+void DragDropManager::cancelDrag() {
+    if (!m_operation) return;
+    finishDrag(false, nullptr);
+}
+
+void DragDropManager::handleMouseMove(Point2f screenPos, ModifierKeys mods) {
+    if (!m_operation) return;
+
+    m_operation->m_currentPos = screenPos;
+    m_operation->m_effect = hasModifier(mods, ModifierKeys::Control)
+        ? DragDropEffect::Copy : DragDropEffect::Move;
+
+    // Hit-test for drop targets
+    Element* newTarget = hitTestDropTarget(screenPos);
+
+    if (newTarget != m_operation->m_currentTarget) {
+        // Leave old target
+        if (m_operation->m_currentTarget) {
+            m_operation->m_currentTarget->onDragLeave();
+            m_operation->m_currentTarget->m_dragLeave.emit();
+        }
+        m_operation->m_currentTarget = newTarget;
+        m_operation->m_lastAccepted = false;
+    }
+
+    // Notify current target
+    if (m_operation->m_currentTarget) {
+        Rectf sBounds = m_operation->m_currentTarget->screenBounds();
+        DragDropEvent event{
+            m_operation->data(),
+            screenPos,
+            {screenPos.x - sBounds.x, screenPos.y - sBounds.y},
+            mods,
+            m_operation->m_effect,
+            false,
+            m_operation->m_source
+        };
+        m_operation->m_currentTarget->onDragOver(event);
+        m_operation->m_currentTarget->m_dragOver.emit(event);
+        m_operation->m_lastAccepted = event.accepted;
+        if (event.accepted) {
+            m_operation->m_effect = event.effect;
+        }
+    }
+}
+
+void DragDropManager::handleMouseUp(MouseButton button, Point2f screenPos, ModifierKeys mods) {
+    if (!m_operation) return;
+
+    // Right-click cancels
+    if (button != MouseButton::Left) {
+        finishDrag(false, nullptr);
+        return;
+    }
+
+    Element* target = m_operation->m_currentTarget;
+    if (target && m_operation->m_lastAccepted) {
+        Rectf sBounds = target->screenBounds();
+        DragDropEvent event{
+            m_operation->data(),
+            screenPos,
+            {screenPos.x - sBounds.x, screenPos.y - sBounds.y},
+            mods,
+            m_operation->m_effect,
+            false,
+            m_operation->m_source
+        };
+        target->onDrop(event);
+        target->m_drop.emit(event);
+        finishDrag(true, target);
+    } else {
+        finishDrag(false, nullptr);
+    }
+}
+
+void DragDropManager::handleKeyDown(Key key) {
+    if (!m_operation) return;
+    if (key == Key::Escape) {
+        finishDrag(false, nullptr);
+    }
+}
+
+void DragDropManager::finishDrag(bool dropped, Element* target) {
+    if (!m_operation) return;
+
+    // Leave current target
+    if (m_operation->m_currentTarget) {
+        m_operation->m_currentTarget->onDragLeave();
+        m_operation->m_currentTarget->m_dragLeave.emit();
+    }
+
+    // Remove overlay
+    if (m_overlayOwner) {
+        m_context.removeOverlay(m_overlayOwner.get());
+    }
+
+    // Emit signals
+    if (dropped) {
+        m_dragCompleted.emit(m_operation->data(), target);
+    } else {
+        m_dragCancelled.emit(m_operation->data());
+    }
+
+    m_operation.reset();
+
+    // Clear stale hovered element — onDrop handlers may have destroyed
+    // elements (e.g., clearChildren + rebuild), leaving m_hoveredElement dangling.
+    m_context.inputManager().m_hoveredElement = nullptr;
+    m_context.inputManager().updateHoveredElement();
+}
+
+void DragDropManager::renderPreview(RenderContext& ctx) {
+    if (!m_operation) return;
+
+    Point2f pos = m_operation->m_currentPos;
+
+    if (m_operation->previewRenderer) {
+        m_operation->previewRenderer(ctx, pos);
+    } else {
+        // Default: semi-transparent rectangle at cursor
+        ctx.fillRect(
+            {pos.x - 20, pos.y - 20, 40, 40},
+            Color(100, 100, 200, 140)
+        );
+    }
+}
+
+Element* DragDropManager::hitTestDropTarget(Point2f screenPos) {
+    Element* root = m_context.root();
+    if (!root) return nullptr;
+
+    Point2f localPoint = {
+        screenPos.x - root->bounds().x,
+        screenPos.y - root->bounds().y
+    };
+
+    Element* hit = root->hitTest(localPoint);
+
+    // Walk up the parent chain to find the first drop target
+    Element* current = hit;
+    while (current) {
+        if (current->isDropTarget()) {
+            return current;
+        }
+        current = current->parent();
+    }
+    return nullptr;
 }
 
 } // namespace gut
@@ -17550,6 +17924,10 @@ void Element::onMouseLeave() {
     setisHovered(false);
     m_mouseLeft.emit();
 }
+
+void Element::onDragOver(DragDropEvent& /*event*/) {}
+void Element::onDragLeave() {}
+void Element::onDrop(DragDropEvent& /*event*/) {}
 
 void Element::setParent(Element* parent) {
     m_parent = parent;
@@ -25371,6 +25749,7 @@ Context::Context(std::unique_ptr<RenderBackend> backend)
     , m_renderContext(std::make_unique<RenderContext>(*m_backend))
     , m_inputManager(std::make_unique<InputManager>(*this))
     , m_focusManager(std::make_unique<FocusManager>(*this))
+    , m_dragDropManager(std::make_unique<DragDropManager>(*this))
 {
 }
 

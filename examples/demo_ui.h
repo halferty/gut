@@ -48,6 +48,165 @@ public:
 };
 
 // =========================================================================
+// DragSlot — draggable slot for drag-and-drop demo
+// =========================================================================
+class DragSlot : public gut::Panel {
+    GUT_OBJECT(DragSlot, gut::Panel)
+public:
+    struct SlotData {
+        gut::String label;
+        gut::Color  color;
+    };
+
+    void configure(int index, const char* label, gut::Color color) {
+        m_index = index;
+        m_data = {label, color};
+        m_occupied = true;
+        rebuild();
+    }
+
+    void configureEmpty(int index) {
+        m_index = index;
+        m_data = {};
+        m_occupied = false;
+        rebuild();
+    }
+
+    bool occupied() const { return m_occupied; }
+    int  slotIndex() const { return m_index; }
+    const SlotData& slotData() const { return m_data; }
+
+    void setSlotData(const SlotData& d) {
+        m_data = d;
+        m_occupied = true;
+        rebuild();
+    }
+
+    void clearSlot() {
+        m_data = {};
+        m_occupied = false;
+        rebuild();
+    }
+
+protected:
+    bool onMouseEvent(const gut::MouseEvent& event) override {
+        if (!m_occupied) return false;
+        switch (event.type) {
+            case gut::MouseEventType::ButtonDown:
+                if (event.isLeftButton()) {
+                    m_pressPos = event.screenPosition;
+                    m_potentialDrag = true;
+                    context()->inputManager().captureMouse(this);
+                    return true;
+                }
+                break;
+            case gut::MouseEventType::Move:
+                if (m_potentialDrag) {
+                    float dx = event.screenPosition.x - m_pressPos.x;
+                    float dy = event.screenPosition.y - m_pressPos.y;
+                    if (dx*dx + dy*dy > 25.0f) {
+                        m_potentialDrag = false;
+                        gut::Color previewColor = m_data.color;
+                        context()->dragDropManager().beginDrag(
+                            this,
+                            gut::DragData("demo_slot", SlotData{m_data.label, m_data.color}),
+                            [previewColor](gut::RenderContext& ctx, gut::Point2f pos) {
+                                ctx.fillRoundedRect(
+                                    {pos.x - 24, pos.y - 24, 48, 48},
+                                    6.0f, gut::Color(previewColor.r, previewColor.g, previewColor.b, 0.7f));
+                            }
+                        );
+                        return true;
+                    }
+                }
+                break;
+            case gut::MouseEventType::ButtonUp:
+                if (m_potentialDrag) {
+                    m_potentialDrag = false;
+                    context()->inputManager().releaseMouse();
+                }
+                break;
+            default: break;
+        }
+        return Panel::onMouseEvent(event);
+    }
+
+    void onDragOver(gut::DragDropEvent& event) override {
+        if (event.data.format() == "demo_slot") {
+            event.accepted = true;
+            event.effect = gut::DragDropEffect::Move;
+            if (!m_dragHighlight) {
+                m_dragHighlight = true;
+                invalidateRender();
+            }
+        }
+    }
+
+    void onDragLeave() override {
+        if (m_dragHighlight) {
+            m_dragHighlight = false;
+            invalidateRender();
+        }
+    }
+
+    void onDrop(gut::DragDropEvent& event) override {
+        m_dragHighlight = false;
+        auto* srcSlot = dynamic_cast<DragSlot*>(event.source);
+        if (!srcSlot) return;
+
+        // Swap slot contents
+        SlotData srcData = srcSlot->slotData();
+        if (m_occupied) {
+            srcSlot->setSlotData(m_data);
+        } else {
+            srcSlot->clearSlot();
+        }
+        setSlotData(srcData);
+        event.accepted = true;
+    }
+
+    void onRender(gut::RenderContext& ctx) override {
+        Panel::onRender(ctx);
+        if (m_dragHighlight) {
+            ctx.strokeRoundedRect(
+                {1, 1, bounds().width - 2, bounds().height - 2},
+                6.0f, gut::Color::fromRgba8(100, 200, 255, 200), 2.0f);
+        }
+    }
+
+private:
+    void rebuild() {
+        clearChildren();
+        setwidth(56.0f);
+        setheight(56.0f);
+        setcornerRadius(6.0f);
+        setisDropTarget(true);
+
+        if (m_occupied) {
+            setbackground(m_data.color);
+            auto lbl = gut::makeRef<gut::Text>();
+            lbl->settext(m_data.label);
+            lbl->setfontSize(13.0f);
+            lbl->setforeground(gut::Color::white());
+            lbl->setmargin(gut::Thickness{0, 16, 0, 0});
+            lbl->sethorizontalAlignment(gut::HorizontalAlignment::Center);
+            addChild(lbl);
+        } else {
+            setbackground(gut::Color::fromRgba8(40, 44, 60));
+            setborderColor(gut::Color::fromRgba8(60, 65, 85));
+            setborderWidth(1.0f);
+        }
+    }
+
+    int m_index{0};
+    SlotData m_data;
+    bool m_occupied{false};
+    bool m_potentialDrag{false};
+    bool m_dragHighlight{false};
+    gut::Point2f m_pressPos{};
+};
+
+// =========================================================================
 // GameTextures — procedural textures for the Game UI tab
 // =========================================================================
 struct GameTextures {
@@ -567,6 +726,83 @@ inline gut::Ref<gut::Element> buildControlsTab(const DemoConfig& cfg) {
         col3->addChild(card);
     }
     page->addChild(col3);
+
+    // --- Column 4: Drag & Drop ---
+    auto col4 = makeRef<StackPanel>(Orientation::Vertical);
+    col4->setspacing(16.0f);
+
+    { // Drag-and-drop card
+        auto card = makeCard(280.0f);
+        auto inner = makeRef<StackPanel>(Orientation::Vertical);
+        inner->setmargin(Thickness{16, 16, 16, 16});
+        inner->addChild(makeHeading("Drag & Drop"));
+
+        auto hint = makeRef<Text>();
+        hint->settext("Drag items between slots to rearrange:");
+        hint->setfontSize(11.0f);
+        hint->setforeground(c(160, 170, 200));
+        hint->setmargin(Thickness{0, 0, 0, 10});
+        inner->addChild(hint);
+
+        // Action bar row 1
+        auto row1 = makeRef<StackPanel>(Orientation::Horizontal);
+        row1->setspacing(6.0f);
+        row1->setmargin(Thickness{0, 0, 0, 6});
+
+        struct SlotDef { const char* label; gut::u8 r, g, b; };
+        SlotDef defs[] = {
+            {"Fire",   180, 60,  40 },
+            {"Ice",    50,  120, 200},
+            {"Heal",   40,  170, 80 },
+            {"Zap",    180, 160, 40 },
+            {nullptr,  0,   0,   0  },
+        };
+
+        for (int i = 0; i < 5; i++) {
+            auto slot = makeRef<DragSlot>();
+            if (defs[i].label) {
+                slot->configure(i, defs[i].label, c(defs[i].r, defs[i].g, defs[i].b));
+            } else {
+                slot->configureEmpty(i);
+            }
+            row1->addChild(slot);
+        }
+        inner->addChild(row1);
+
+        // Action bar row 2
+        auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
+        row2->setspacing(6.0f);
+
+        SlotDef defs2[] = {
+            {nullptr,  0,   0,   0  },
+            {"Pot",    170, 60,  160},
+            {nullptr,  0,   0,   0  },
+            {"Run",    60,  140, 180},
+            {"Def",    100, 100, 110},
+        };
+
+        for (int i = 0; i < 5; i++) {
+            auto slot = makeRef<DragSlot>();
+            if (defs2[i].label) {
+                slot->configure(i + 5, defs2[i].label, c(defs2[i].r, defs2[i].g, defs2[i].b));
+            } else {
+                slot->configureEmpty(i + 5);
+            }
+            row2->addChild(slot);
+        }
+        inner->addChild(row2);
+
+        auto note = makeRef<Text>();
+        note->settext("Ctrl+drag to copy (coming soon)");
+        note->setfontSize(10.0f);
+        note->setforeground(c(120, 130, 160));
+        note->setmargin(Thickness{0, 10, 0, 0});
+        inner->addChild(note);
+
+        card->addChild(inner);
+        col4->addChild(card);
+    }
+    page->addChild(col4);
 
     return page;
 }
@@ -1920,7 +2156,7 @@ inline gut::Ref<gut::Element> buildClippingBlurTab() {
         // Style 1: Gradient clipped
         {
             auto col = makeRef<StackPanel>(Orientation::Vertical);
-            auto clip = makeRef<Panel>();
+            auto clip = makeRef<Canvas>();
             clip->setwidth(100); clip->setheight(80); clip->setcornerRadius(16);
             clip->setclipToBounds(true); clip->setbackground(c(40,40,55));
             auto grad = makeRef<Panel>();
@@ -1936,7 +2172,7 @@ inline gut::Ref<gut::Element> buildClippingBlurTab() {
         // Style 2: Quadrants
         {
             auto col = makeRef<StackPanel>(Orientation::Vertical);
-            auto clip = makeRef<Panel>();
+            auto clip = makeRef<Canvas>();
             clip->setwidth(100); clip->setheight(80); clip->setcornerRadius(16);
             clip->setclipToBounds(true); clip->setbackground(c(30,30,45));
             auto q1 = makeRef<Panel>(); q1->setwidth(50); q1->setheight(40);
@@ -1958,7 +2194,7 @@ inline gut::Ref<gut::Element> buildClippingBlurTab() {
         // Style 3: Pill
         {
             auto col = makeRef<StackPanel>(Orientation::Vertical);
-            auto pill = makeRef<Panel>();
+            auto pill = makeRef<Canvas>();
             pill->setwidth(100); pill->setheight(40); pill->setcornerRadius(20);
             pill->setclipToBounds(true); pill->setbackground(c(60,30,120));
             auto fill = makeRef<Panel>();
@@ -1974,7 +2210,7 @@ inline gut::Ref<gut::Element> buildClippingBlurTab() {
         // Style 4: Text clip
         {
             auto col = makeRef<StackPanel>(Orientation::Vertical);
-            auto clip = makeRef<Panel>();
+            auto clip = makeRef<Canvas>();
             clip->setwidth(100); clip->setheight(80); clip->setcornerRadius(16);
             clip->setclipToBounds(true); clip->setbackground(c(35,55,45));
             auto t1 = makeRef<Text>("ABCDEFGHIJKLMNOPQR", 11.0f);

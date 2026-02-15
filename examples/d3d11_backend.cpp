@@ -405,7 +405,9 @@ void D3D11RenderBackend::createBuffers() {
     // Projection constant buffer (VS b0)
     {
         D3D11_BUFFER_DESC desc{};
-        desc.ByteWidth = sizeof(DirectX::XMFLOAT4X4);
+        // 96 bytes: large enough for CompositeCB used during backdrop blur
+        // (projection 64 + blurRect 16 + cornerRadius 4 + pad 12)
+        desc.ByteWidth = 96;
         desc.Usage = D3D11_USAGE_DYNAMIC;
         desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -723,9 +725,11 @@ void D3D11RenderBackend::executeBackdropBlur(
 
     m_context->DrawIndexed(6, 0, 0);
 
-    // Reset vertex/index buffer offset tracking — blur overwrote the buffers
-    m_vertexBufferOffset = 0;
-    m_indexBufferOffset = 0;
+    // NOTE: Do NOT reset m_vertexBufferOffset / m_indexBufferOffset here.
+    // The caller re-uploads the original vertex/index data at the current
+    // offset after this function returns. Resetting would cause a mismatch
+    // between index values (remapped with the original offset) and vertex
+    // positions (re-uploaded at offset 0).
 }
 
 // ============================================================================
@@ -740,8 +744,12 @@ void D3D11RenderBackend::render(
     if (commands.empty()) return;
 
     // Upload vertex data (scale from logical to physical pixels)
+    // Keep scaled/remapped alive — backdrop blur may need to re-upload them
+    std::vector<Vertex> scaled;
+    std::vector<u32> remapped;
+
     if (!vertices.empty()) {
-        std::vector<Vertex> scaled(vertices.begin(), vertices.end());
+        scaled.assign(vertices.begin(), vertices.end());
         for (auto& v : scaled) {
             v.x *= m_devicePixelRatio;
             v.y *= m_devicePixelRatio;
@@ -755,7 +763,7 @@ void D3D11RenderBackend::render(
     }
 
     if (!indices.empty()) {
-        std::vector<u32> remapped(indices.begin(), indices.end());
+        remapped.assign(indices.begin(), indices.end());
         for (auto& idx : remapped)
             idx += (u32)m_vertexBufferOffset;
 
@@ -866,7 +874,41 @@ void D3D11RenderBackend::render(
         }
         else if (cmd.type == DrawCommandType::DrawBackdropBlur) {
             executeBackdropBlur(cmd, projection);
-            // Re-bind state after blur
+
+            // Backdrop blur used MAP_WRITE_DISCARD on vertex/index buffers,
+            // destroying all previously uploaded data. Re-upload everything.
+            if (!scaled.empty()) {
+                D3D11_MAPPED_SUBRESOURCE mapped;
+                m_context->Map(m_vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+                size_t byteOff = m_vertexBufferOffset * sizeof(Vertex);
+                memcpy((u8*)mapped.pData + byteOff, scaled.data(), scaled.size() * sizeof(Vertex));
+                m_context->Unmap(m_vertexBuffer.Get(), 0);
+            }
+            if (!remapped.empty()) {
+                D3D11_MAPPED_SUBRESOURCE mapped;
+                m_context->Map(m_indexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+                size_t byteOff = m_indexBufferOffset * sizeof(u32);
+                memcpy((u8*)mapped.pData + byteOff, remapped.data(), remapped.size() * sizeof(u32));
+                m_context->Unmap(m_indexBuffer.Get(), 0);
+            }
+
+            // Re-upload projection (blur overwrote cbProjection with CompositeCB)
+            {
+                D3D11_MAPPED_SUBRESOURCE mapped;
+                m_context->Map(m_cbProjection.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+                memcpy(mapped.pData, &projection, sizeof(projection));
+                m_context->Unmap(m_cbProjection.Get(), 0);
+            }
+
+            // Re-upload clip constants (blur overwrote cbClip with BlurConstants)
+            {
+                D3D11_MAPPED_SUBRESOURCE mapped;
+                m_context->Map(m_cbClip.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+                memcpy(mapped.pData, &m_clipConstants, sizeof(m_clipConstants));
+                m_context->Unmap(m_cbClip.Get(), 0);
+            }
+
+            // Re-bind pipeline state
             m_context->IASetVertexBuffers(0, 1, m_vertexBuffer.GetAddressOf(), &stride, &vbOffset);
             m_context->IASetIndexBuffer(m_indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
             m_context->IASetInputLayout(m_inputLayout.Get());
