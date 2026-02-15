@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 81 done, 2 partial, 12 punted, 14 remaining** out of 109 features.
+**Score: 82 done, 2 partial, 12 punted, 13 remaining** out of 109 features.
 
 ---
 
@@ -96,7 +96,7 @@
 - [x] Toast / Notification — auto-dismissing overlay, 6 positions (TopLeft/TopCenter/TopRight/BottomLeft/BottomCenter/BottomRight), stacking, fade-in/out, configurable duration, global Style
 - [p] Splitter / Resizable panels (PUNT)
 - [x] Toolbar — horizontal strip with icon buttons, toggles, separators; procedural Icon system (50 icons), hover/press/toggle states
-- [ ] Menu bar
+- [x] Menu bar — horizontal bar with dropdown menus, icons, shortcut labels, disabled items, keyboard nav (Left/Right/Up/Down/Enter/Esc), hover-to-switch
 - [ ] Expander / Accordion
 - [ ] Badge / Tag
 

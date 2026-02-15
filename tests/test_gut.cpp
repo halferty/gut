@@ -868,6 +868,71 @@ TEST(toolbar_properties) {
 }
 
 // =============================================================================
+// MenuBar
+// =============================================================================
+
+TEST(menubar_create) {
+    auto mb = gut::make<gut::MenuBar>();
+    ASSERT(mb->menuCount() == 0);
+    ASSERT(!mb->isMenuOpen());
+}
+
+TEST(menubar_add_menus) {
+    auto mb = gut::make<gut::MenuBar>();
+    auto& file = mb->addMenu("File");
+    auto& edit = mb->addMenu("Edit");
+    ASSERT(mb->menuCount() == 2);
+    ASSERT(mb->menuAt(0).title() == "File");
+    ASSERT(mb->menuAt(1).title() == "Edit");
+}
+
+TEST(menubar_add_items) {
+    auto mb = gut::make<gut::MenuBar>();
+    auto& file = mb->addMenu("File");
+    file.addItem(gut::IconName::FileNew, "New", "Ctrl+N", []{});
+    file.addItem("Open", []{});
+    file.addItem(gut::IconName::Save, "Save", []{});
+    file.addSeparator();
+    file.addItem("Exit", []{}, false); // disabled
+    ASSERT(file.itemCount() == 5);
+}
+
+TEST(menubar_close_no_crash) {
+    auto mb = gut::make<gut::MenuBar>();
+    mb->addMenu("Test");
+    mb->closeMenu(); // close when nothing open — should be a no-op
+    ASSERT(!mb->isMenuOpen());
+}
+
+TEST(menubar_properties) {
+    auto mb = gut::make<gut::MenuBar>();
+    mb->setbarHeight(30.0f);
+    mb->setbarFontSize(14.0f);
+    mb->setmenuMinWidth(250.0f);
+    mb->setmenuIconSize(16.0f);
+    ASSERT(mb->barHeight() == 30.0f);
+    ASSERT(mb->barFontSize() == 14.0f);
+    ASSERT(mb->menuMinWidth() == 250.0f);
+    ASSERT(mb->menuIconSize() == 16.0f);
+}
+
+TEST(menubar_menu_item_details) {
+    auto mb = gut::make<gut::MenuBar>();
+    auto& m = mb->addMenu("Tools");
+    m.addItem(gut::IconName::Settings, "Preferences", "Ctrl+,", []{}, true);
+    m.addSeparator();
+    m.addItem("Disabled Item", nullptr, false);
+
+    const auto& items = m.items();
+    ASSERT(items.size() == 3);
+    ASSERT(items[0].icon == gut::IconName::Settings);
+    ASSERT(items[0].shortcut == "Ctrl+,");
+    ASSERT(items[0].enabled == true);
+    ASSERT(items[1].separator == true);
+    ASSERT(items[2].enabled == false);
+}
+
+// =============================================================================
 // Main
 // =============================================================================
 
@@ -972,6 +1037,14 @@ int main() {
     RUN_TEST(toolbar_toggle_state);
     RUN_TEST(toolbar_item_enabled);
     RUN_TEST(toolbar_properties);
+    
+    // MenuBar
+    RUN_TEST(menubar_create);
+    RUN_TEST(menubar_add_menus);
+    RUN_TEST(menubar_add_items);
+    RUN_TEST(menubar_close_no_crash);
+    RUN_TEST(menubar_properties);
+    RUN_TEST(menubar_menu_item_details);
     
     std::cout << "\n==========================================\n";
     std::cout << "Results: " << testsPassed << " passed, " << testsFailed << " failed\n";

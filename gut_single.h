@@ -6509,6 +6509,159 @@ private:
 } // namespace gut
 
 
+// --- gut/elements/MenuBar.h ---
+
+namespace gut {
+
+/**
+ * @brief A horizontal menu bar with dropdown menus.
+ *
+ * Usage:
+ *     auto menuBar = make<MenuBar>();
+ *     auto& file = menuBar->addMenu("File");
+ *     file.addItem(IconName::FileNew, "New",  "Ctrl+N", [&]{ doNew(); });
+ *     file.addItem(IconName::FileOpen,"Open", "Ctrl+O", [&]{ doOpen(); });
+ *     file.addItem(IconName::Save,    "Save", "Ctrl+S", [&]{ doSave(); });
+ *     file.addSeparator();
+ *     file.addItem("Exit", [&]{ doExit(); });
+ *
+ *     auto& edit = menuBar->addMenu("Edit");
+ *     edit.addItem(IconName::Cut,   "Cut",   "Ctrl+X", [&]{ doCut(); });
+ *     edit.addItem(IconName::Copy,  "Copy",  "Ctrl+C", [&]{ doCopy(); });
+ *     edit.addItem(IconName::Paste, "Paste", "Ctrl+V", [&]{ doPaste(); });
+ */
+class GUT_API MenuBar : public Element {
+    GUT_OBJECT(MenuBar, Element)
+
+public:
+    MenuBar();
+    ~MenuBar() override = default;
+
+    // =========================================================================
+    // Menu item definition
+    // =========================================================================
+
+    struct MenuItem {
+        String label;
+        String shortcut;          ///< Display-only shortcut text (e.g. "Ctrl+N")
+        IconName icon{IconName::None};
+        std::function<void()> action;
+        bool separator{false};
+        bool enabled{true};
+    };
+
+    // =========================================================================
+    // A single top-level menu and its items
+    // =========================================================================
+
+    class Menu {
+    public:
+        explicit Menu(String title) : m_title(std::move(title)) {}
+
+        /// Add a menu item with icon, label, shortcut, and action.
+        void addItem(IconName icon, String label, String shortcut,
+                     std::function<void()> action, bool enabled = true);
+
+        /// Add a menu item with label and action (no icon, no shortcut).
+        void addItem(String label, std::function<void()> action, bool enabled = true);
+
+        /// Add a menu item with icon, label, and action (no shortcut).
+        void addItem(IconName icon, String label, std::function<void()> action,
+                     bool enabled = true);
+
+        /// Add a separator line.
+        void addSeparator();
+
+        const String& title() const { return m_title; }
+        const std::vector<MenuItem>& items() const { return m_items; }
+        usize itemCount() const { return m_items.size(); }
+
+    private:
+        String m_title;
+        std::vector<MenuItem> m_items;
+    };
+
+    // =========================================================================
+    // Top-level API
+    // =========================================================================
+
+    /// Add a top-level menu and return a reference for adding items.
+    Menu& addMenu(String title);
+
+    /// Access menus.
+    usize menuCount() const { return m_menus.size(); }
+    Menu& menuAt(usize index) { return m_menus[index]; }
+    const Menu& menuAt(usize index) const { return m_menus[index]; }
+
+    /// Programmatically close any open menu.
+    void closeMenu();
+
+    /// Check if any menu is open.
+    bool isMenuOpen() const { return m_openMenuIndex >= 0; }
+
+    // =========================================================================
+    // Appearance
+    // =========================================================================
+
+    GUT_PROPERTY(f32, barHeight, 28.0f)
+    GUT_PROPERTY(f32, barFontSize, 12.5f)
+    GUT_PROPERTY(f32, menuFontSize, 12.0f)
+    GUT_PROPERTY(f32, menuItemHeight, 26.0f)
+    GUT_PROPERTY(f32, menuMinWidth, 200.0f)
+    GUT_PROPERTY(f32, menuCornerRadius, 6.0f)
+    GUT_PROPERTY(f32, menuIconSize, 14.0f)
+    GUT_PROPERTY(f32, separatorHeight, 1.0f)
+
+    GUT_PROPERTY(Color, barBackground, Color::fromHex(0x1E1E2A))
+    GUT_PROPERTY(Color, barForeground, Color::fromRgba8(200, 200, 220, 255))
+    GUT_PROPERTY(Color, barHoverBackground, Color::fromRgba8(55, 55, 70, 255))
+    GUT_PROPERTY(Color, barActiveBackground, Color::fromRgba8(40, 85, 180, 255))
+
+    GUT_PROPERTY(Color, menuBackground, Color::fromRgba8(35, 35, 48, 245))
+    GUT_PROPERTY(Color, menuBorderColor, Color::fromRgba8(70, 70, 90, 200))
+    GUT_PROPERTY(Color, menuItemForeground, Color::fromRgba8(210, 210, 230, 255))
+    GUT_PROPERTY(Color, menuItemHoverBackground, Color::fromRgba8(60, 100, 200, 255))
+    GUT_PROPERTY(Color, menuItemHoverForeground, Color::fromRgba8(255, 255, 255, 255))
+    GUT_PROPERTY(Color, menuDisabledForeground, Color::fromRgba8(100, 100, 120, 255))
+    GUT_PROPERTY(Color, menuSeparatorColor, Color::fromRgba8(60, 60, 78, 200))
+    GUT_PROPERTY(Color, shortcutForeground, Color::fromRgba8(130, 130, 155, 255))
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
+    void onMouseLeave() override;
+
+private:
+    std::vector<Menu> m_menus;
+
+    // --- Bar layout ---
+    struct MenuLayout {
+        Rectf rect;     // Rect of the top-level label in bar coordinates
+        usize menuIndex;
+    };
+    std::vector<MenuLayout> m_barLayout;
+    void computeBarLayout();
+    isize barIndexAtX(f32 x, f32 y) const;
+
+    // --- Open menu state ---
+    isize m_openMenuIndex{-1};
+    isize m_hoveredBarIndex{-1};
+    isize m_hoveredItemIndex{-1};
+    bool  m_menuActive{false};    ///< True after a click opened a menu (enables hover-to-switch)
+
+    // --- Dropdown helpers ---
+    void openMenuAt(isize barIndex);
+    void renderDropdown(RenderContext& ctx);
+    f32  dropdownHeight(const Menu& menu) const;
+    f32  dropdownWidth(const Menu& menu) const;
+    isize dropdownItemIndexAtY(const Menu& menu, f32 localY) const;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/Image.h ---
 
 
@@ -23596,6 +23749,494 @@ void Toolbar::onMouseLeave() {
     if (m_hoveredItem != -1) {
         m_hoveredItem = -1;
         invalidateRender();
+    }
+    Element::onMouseLeave();
+}
+
+} // namespace gut
+
+
+// === MenuBar implementation ==================================================
+
+namespace gut {
+
+// ─── Menu item builders ─────────────────────────────────────────────────────
+
+void MenuBar::Menu::addItem(IconName icon, String label, String shortcut,
+                             std::function<void()> action, bool enabled) {
+    m_items.push_back({std::move(label), std::move(shortcut), icon, std::move(action), false, enabled});
+}
+
+void MenuBar::Menu::addItem(String label, std::function<void()> action, bool enabled) {
+    addItem(IconName::None, std::move(label), "", std::move(action), enabled);
+}
+
+void MenuBar::Menu::addItem(IconName icon, String label, std::function<void()> action,
+                              bool enabled) {
+    addItem(icon, std::move(label), "", std::move(action), enabled);
+}
+
+void MenuBar::Menu::addSeparator() {
+    m_items.push_back({"", "", IconName::None, nullptr, true, false});
+}
+
+// ─── MenuBar ────────────────────────────────────────────────────────────────
+
+MenuBar::MenuBar() {
+    setfocusable(true);
+}
+
+MenuBar::Menu& MenuBar::addMenu(String title) {
+    m_menus.emplace_back(std::move(title));
+    invalidateLayout();
+    invalidateRender();
+    return m_menus.back();
+}
+
+// ─── Bar layout ─────────────────────────────────────────────────────────────
+
+void MenuBar::computeBarLayout() {
+    m_barLayout.clear();
+    f32 x = 4.0f;
+    f32 hPad = 12.0f;
+    for (usize i = 0; i < m_menus.size(); ++i) {
+        f32 labelW = static_cast<f32>(m_menus[i].title().size()) * barFontSize() * 0.62f;
+        f32 w = labelW + hPad * 2.0f;
+        m_barLayout.push_back({{x, 0, w, barHeight()}, i});
+        x += w;
+    }
+}
+
+isize MenuBar::barIndexAtX(f32 x, f32 y) const {
+    if (y < 0 || y > barHeight()) return -1;
+    for (auto& lay : m_barLayout) {
+        if (x >= lay.rect.x && x < lay.rect.x + lay.rect.width) {
+            return static_cast<isize>(lay.menuIndex);
+        }
+    }
+    return -1;
+}
+
+// ─── Dropdown geometry ──────────────────────────────────────────────────────
+
+f32 MenuBar::dropdownHeight(const Menu& menu) const {
+    f32 h = 0;
+    for (const auto& item : menu.items()) {
+        h += item.separator ? separatorHeight() + 6.0f : menuItemHeight();
+    }
+    return h;
+}
+
+f32 MenuBar::dropdownWidth(const Menu& menu) const {
+    f32 maxW = menuMinWidth();
+    f32 iconCol = menuIconSize() + 8.0f;  // icon column width
+    f32 shortcutPad = 40.0f;              // gap before shortcut text
+    for (const auto& item : menu.items()) {
+        if (item.separator) continue;
+        f32 labelW = static_cast<f32>(item.label.size()) * menuFontSize() * 0.62f;
+        f32 shortcutW = item.shortcut.empty() ? 0.0f
+                        : static_cast<f32>(item.shortcut.size()) * menuFontSize() * 0.58f + shortcutPad;
+        f32 row = 12.0f + iconCol + labelW + shortcutW + 12.0f;
+        maxW = std::max(maxW, row);
+    }
+    return maxW;
+}
+
+isize MenuBar::dropdownItemIndexAtY(const Menu& menu, f32 localY) const {
+    f32 y = 0;
+    for (isize i = 0; i < static_cast<isize>(menu.items().size()); ++i) {
+        const auto& item = menu.items()[static_cast<usize>(i)];
+        f32 ih = item.separator ? separatorHeight() + 6.0f : menuItemHeight();
+        if (localY >= y && localY < y + ih) {
+            return item.separator ? -1 : i;
+        }
+        y += ih;
+    }
+    return -1;
+}
+
+// ─── Open / close ───────────────────────────────────────────────────────────
+
+void MenuBar::openMenuAt(isize barIndex) {
+    if (barIndex < 0 || static_cast<usize>(barIndex) >= m_menus.size()) return;
+
+    bool wasOpen = m_openMenuIndex >= 0;
+    m_openMenuIndex = barIndex;
+    m_hoveredItemIndex = -1;
+    m_menuActive = true;
+
+    if (!wasOpen && context()) {
+        context()->inputManager().captureMouse(this);
+        context()->addOverlay(this, [this](RenderContext& ctx) {
+            renderDropdown(ctx);
+        });
+    }
+    invalidateRender();
+}
+
+void MenuBar::closeMenu() {
+    if (m_openMenuIndex < 0) return;
+    m_openMenuIndex = -1;
+    m_hoveredItemIndex = -1;
+    m_menuActive = false;
+
+    if (context()) {
+        context()->inputManager().releaseMouse();
+        context()->removeOverlay(this);
+    }
+    invalidateRender();
+}
+
+// ─── Measure / Render ───────────────────────────────────────────────────────
+
+Size2f MenuBar::measureOverride(Size2f availableSize) {
+    computeBarLayout();
+    return {availableSize.width, barHeight()};
+}
+
+void MenuBar::onRender(RenderContext& ctx) {
+    computeBarLayout();
+
+    // Bar background
+    ctx.fillRect({0, 0, bounds().width, barHeight()}, barBackground());
+    // Bottom border
+    ctx.fillRect({0, barHeight() - 1, bounds().width, 1},
+                 Color::fromRgba8(50, 50, 65, 200));
+
+    Font* font = context() ? context()->defaultFont() : nullptr;
+    Ref<FontFace> face;
+    if (font) face = font->getFace(barFontSize());
+
+    for (auto& lay : m_barLayout) {
+        isize idx = static_cast<isize>(lay.menuIndex);
+        const auto& menu = m_menus[lay.menuIndex];
+        Rectf r = lay.rect;
+
+        bool isOpen  = (idx == m_openMenuIndex);
+        bool hovered = (idx == m_hoveredBarIndex);
+
+        if (isOpen) {
+            ctx.fillRect(r, barActiveBackground());
+        } else if (hovered) {
+            ctx.fillRect(r, barHoverBackground());
+        }
+
+        if (face) {
+            f32 tx = r.x + (r.width - static_cast<f32>(menu.title().size()) * barFontSize() * 0.62f) * 0.5f;
+            f32 ty = r.y + (r.height - face->lineHeight()) * 0.5f + face->ascender();
+            ctx.drawText(face.get(), menu.title(), {tx, ty}, barForeground());
+        }
+    }
+}
+
+// ─── Dropdown overlay rendering ─────────────────────────────────────────────
+
+void MenuBar::renderDropdown(RenderContext& ctx) {
+    if (m_openMenuIndex < 0) return;
+    const auto& menu = m_menus[static_cast<usize>(m_openMenuIndex)];
+    if (menu.items().empty()) return;
+
+    // Position: below the bar item
+    Rectf sb = screenBounds();
+    f32 barItemX = 0;
+    for (auto& lay : m_barLayout) {
+        if (static_cast<isize>(lay.menuIndex) == m_openMenuIndex) {
+            barItemX = sb.x + lay.rect.x;
+            break;
+        }
+    }
+
+    f32 ddW = dropdownWidth(menu);
+    f32 ddH = dropdownHeight(menu);
+    f32 pad = 4.0f;
+    f32 totalH = ddH + pad * 2.0f;
+
+    f32 mx = barItemX;
+    f32 my = sb.y + barHeight();
+
+    // Clamp to frame
+    Size2f frame = ctx.frameSize();
+    if (mx + ddW > frame.width - 4.0f) mx = frame.width - 4.0f - ddW;
+    if (my + totalH > frame.height - 4.0f) my = frame.height - 4.0f - totalH;
+    if (mx < 4.0f) mx = 4.0f;
+
+    // Shadow
+    ctx.fillRoundedRect({mx + 3, my + 3, ddW, totalH}, menuCornerRadius(),
+                         Color::fromRgba8(0, 0, 0, 80));
+    // Background
+    ctx.fillRoundedRect({mx, my, ddW, totalH}, menuCornerRadius(), menuBackground());
+    ctx.strokeRoundedRect({mx, my, ddW, totalH}, menuCornerRadius(), menuBorderColor(), 1.0f);
+
+    // Items
+    Font* font = context() ? context()->defaultFont() : nullptr;
+    Ref<FontFace> face;
+    if (font) face = font->getFace(menuFontSize());
+
+    f32 iconCol = menuIconSize() + 8.0f;
+    f32 iy = my + pad;
+
+    for (isize i = 0; i < static_cast<isize>(menu.items().size()); ++i) {
+        const auto& item = menu.items()[static_cast<usize>(i)];
+
+        if (item.separator) {
+            f32 sepY = iy + 3.0f;
+            ctx.fillRect({mx + 8.0f, sepY, ddW - 16.0f, separatorHeight()}, menuSeparatorColor());
+            iy += separatorHeight() + 6.0f;
+            continue;
+        }
+
+        f32 ih = menuItemHeight();
+        bool hovered = (i == m_hoveredItemIndex && item.enabled);
+
+        // Hover highlight
+        if (hovered) {
+            f32 hlPad = 4.0f;
+            ctx.fillRoundedRect({mx + hlPad, iy, ddW - hlPad * 2.0f, ih}, 4.0f,
+                                 menuItemHoverBackground());
+        }
+
+        Color fg;
+        if (!item.enabled) fg = menuDisabledForeground();
+        else if (hovered) fg = menuItemHoverForeground();
+        else fg = menuItemForeground();
+
+        // Icon
+        f32 contentX = mx + 12.0f;
+        if (item.icon != IconName::None) {
+            f32 icoS = menuIconSize();
+            f32 icoY = iy + (ih - icoS) * 0.5f;
+            Icon::draw(ctx, item.icon, {contentX, icoY, icoS, icoS}, fg);
+        }
+        contentX += iconCol;
+
+        // Label
+        if (face) {
+            f32 ty = iy + (ih - face->lineHeight()) * 0.5f + face->ascender();
+            ctx.drawText(face.get(), item.label, {contentX, ty}, fg);
+
+            // Shortcut text (right-aligned)
+            if (!item.shortcut.empty()) {
+                f32 scW = static_cast<f32>(item.shortcut.size()) * menuFontSize() * 0.58f;
+                f32 scX = mx + ddW - 12.0f - scW;
+                Color scFg = hovered ? menuItemHoverForeground() : shortcutForeground();
+                ctx.drawText(face.get(), item.shortcut, {scX, ty}, scFg);
+            }
+        }
+
+        iy += ih;
+    }
+}
+
+// ─── Mouse events ───────────────────────────────────────────────────────────
+
+bool MenuBar::onMouseEvent(const MouseEvent& event) {
+    // When the overlay captures the mouse, all events come through here.
+    // We need to figure out if the mouse is on:
+    //   (a) a bar label         → hover or switch menu
+    //   (b) the open dropdown   → hover/click item
+    //   (c) outside             → close
+
+    Rectf sb = screenBounds();
+    f32 sx = sb.x + event.position.x;
+    f32 sy = sb.y + event.position.y;
+
+    // Local bar coordinates
+    f32 barLocalX = event.position.x;
+    f32 barLocalY = event.position.y;
+
+    // Check if in bar area
+    bool inBar = (barLocalY >= 0 && barLocalY < barHeight() &&
+                  barLocalX >= 0 && barLocalX < bounds().width);
+
+    // Check if in dropdown area
+    bool inDropdown = false;
+    f32 dropLocalX = 0, dropLocalY = 0;
+    f32 ddW = 0, ddH = 0, ddX = 0, ddY = 0;
+
+    if (m_openMenuIndex >= 0) {
+        const auto& menu = m_menus[static_cast<usize>(m_openMenuIndex)];
+        ddW = dropdownWidth(menu);
+        ddH = dropdownHeight(menu) + 8.0f; // +pad*2
+        ddY = sb.y + barHeight();
+
+        // Find bar item X
+        for (auto& lay : m_barLayout) {
+            if (static_cast<isize>(lay.menuIndex) == m_openMenuIndex) {
+                ddX = sb.x + lay.rect.x;
+                break;
+            }
+        }
+        // Clamp same as render
+        if (ddX + ddW > 0) { /* ddX is already correct */ }
+
+        inDropdown = (sx >= ddX && sx < ddX + ddW && sy >= ddY && sy < ddY + ddH);
+        dropLocalX = sx - ddX;
+        dropLocalY = sy - ddY - 4.0f; // subtract pad
+    }
+
+    switch (event.type) {
+        case MouseEventType::Move: {
+            // Bar hover
+            isize barIdx = inBar ? barIndexAtX(barLocalX, barLocalY) : -1;
+            if (barIdx != m_hoveredBarIndex) {
+                m_hoveredBarIndex = barIdx;
+                invalidateRender();
+            }
+
+            // If a menu is open and we hover over a different bar item → switch
+            if (m_menuActive && barIdx >= 0 && barIdx != m_openMenuIndex) {
+                openMenuAt(barIdx);
+            }
+
+            // Dropdown hover
+            if (m_openMenuIndex >= 0 && inDropdown) {
+                const auto& menu = m_menus[static_cast<usize>(m_openMenuIndex)];
+                isize idx = dropdownItemIndexAtY(menu, dropLocalY);
+                if (idx != m_hoveredItemIndex) {
+                    m_hoveredItemIndex = idx;
+                    invalidateRender();
+                }
+            } else if (m_hoveredItemIndex != -1) {
+                m_hoveredItemIndex = -1;
+                invalidateRender();
+            }
+
+            return m_menuActive; // consume if menu active
+        }
+
+        case MouseEventType::ButtonDown: {
+            if (event.button != MouseButton::Left) return m_menuActive;
+
+            if (inBar) {
+                isize barIdx = barIndexAtX(barLocalX, barLocalY);
+                if (barIdx >= 0) {
+                    if (barIdx == m_openMenuIndex) {
+                        // Toggle off
+                        closeMenu();
+                    } else {
+                        openMenuAt(barIdx);
+                    }
+                    return true;
+                }
+            }
+
+            if (inDropdown && m_openMenuIndex >= 0) {
+                const auto& menu = m_menus[static_cast<usize>(m_openMenuIndex)];
+                isize idx = dropdownItemIndexAtY(menu, dropLocalY);
+                if (idx >= 0) {
+                    const auto& item = menu.items()[static_cast<usize>(idx)];
+                    if (item.enabled && item.action) {
+                        auto action = item.action; // copy before close
+                        closeMenu();
+                        action();
+                        return true;
+                    }
+                }
+                return true;
+            }
+
+            // Outside both → close
+            if (m_menuActive) {
+                closeMenu();
+                return true;
+            }
+            return false;
+        }
+
+        default:
+            return m_menuActive;
+    }
+}
+
+bool MenuBar::onKeyEvent(const KeyEvent& event) {
+    if (event.type != KeyEventType::KeyDown) return m_menuActive;
+
+    if (!m_menuActive) return false;
+
+    switch (event.key) {
+        case Key::Escape:
+            closeMenu();
+            return true;
+
+        case Key::Left: {
+            if (m_openMenuIndex >= 0) {
+                isize next = m_openMenuIndex - 1;
+                if (next < 0) next = static_cast<isize>(m_menus.size()) - 1;
+                openMenuAt(next);
+            }
+            return true;
+        }
+
+        case Key::Right: {
+            if (m_openMenuIndex >= 0) {
+                isize next = m_openMenuIndex + 1;
+                if (next >= static_cast<isize>(m_menus.size())) next = 0;
+                openMenuAt(next);
+            }
+            return true;
+        }
+
+        case Key::Down: {
+            if (m_openMenuIndex >= 0) {
+                const auto& menu = m_menus[static_cast<usize>(m_openMenuIndex)];
+                isize count = static_cast<isize>(menu.items().size());
+                // Move to next non-separator enabled item
+                isize start = m_hoveredItemIndex;
+                for (isize attempt = 0; attempt < count; ++attempt) {
+                    start = (start + 1) % count;
+                    const auto& item = menu.items()[static_cast<usize>(start)];
+                    if (!item.separator && item.enabled) {
+                        m_hoveredItemIndex = start;
+                        invalidateRender();
+                        break;
+                    }
+                }
+            }
+            return true;
+        }
+
+        case Key::Up: {
+            if (m_openMenuIndex >= 0) {
+                const auto& menu = m_menus[static_cast<usize>(m_openMenuIndex)];
+                isize count = static_cast<isize>(menu.items().size());
+                isize start = m_hoveredItemIndex < 0 ? 0 : m_hoveredItemIndex;
+                for (isize attempt = 0; attempt < count; ++attempt) {
+                    start = (start - 1 + count) % count;
+                    const auto& item = menu.items()[static_cast<usize>(start)];
+                    if (!item.separator && item.enabled) {
+                        m_hoveredItemIndex = start;
+                        invalidateRender();
+                        break;
+                    }
+                }
+            }
+            return true;
+        }
+
+        case Key::Return: {
+            if (m_openMenuIndex >= 0 && m_hoveredItemIndex >= 0) {
+                const auto& menu = m_menus[static_cast<usize>(m_openMenuIndex)];
+                const auto& item = menu.items()[static_cast<usize>(m_hoveredItemIndex)];
+                if (item.enabled && item.action) {
+                    auto action = item.action;
+                    closeMenu();
+                    action();
+                }
+            }
+            return true;
+        }
+
+        default:
+            return true; // consume all keys while menu active
+    }
+}
+
+void MenuBar::onMouseLeave() {
+    if (!m_menuActive) {
+        if (m_hoveredBarIndex != -1) {
+            m_hoveredBarIndex = -1;
+            invalidateRender();
+        }
     }
     Element::onMouseLeave();
 }

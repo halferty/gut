@@ -3403,6 +3403,182 @@ private:
         tabControl->addTab("Icons & Toolbar", page);
     }
 
+    // =================================================================
+    //  Tab 13 — Menu Bar
+    // =================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(900);
+        page->setheight(700);
+
+        // Header
+        auto hdr = make<Text>("MenuBar", 16.0f);
+        hdr->setforeground(Color::white());
+        Canvas::setLeft(*hdr, 20);
+        Canvas::setTop(*hdr, 12);
+        page->addChild(hdr);
+
+        auto sub = make<Text>("A horizontal menu bar with dropdown menus, icons, keyboard shortcuts, and keyboard navigation.", 10.5f);
+        sub->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*sub, 20);
+        Canvas::setTop(*sub, 34);
+        page->addChild(sub);
+
+        // ── Status label to show feedback from menu actions ──────────
+        auto statusLabel = make<Text>("Click a menu item to see feedback here.", 11.0f);
+        statusLabel->setforeground(c(120, 200, 140));
+        Canvas::setLeft(*statusLabel, 20);
+        Canvas::setTop(*statusLabel, 56);
+        page->addChild(statusLabel);
+
+        // Helper to update the status text
+        auto statusPtr = statusLabel.get();
+        auto setStatus = [statusPtr](const char* msg) {
+            statusPtr->settext(msg);
+        };
+
+        // ── Menu Bar 1: Classic app menu ─────────────────────────────
+        auto mb1Label = make<Text>("App-style menu bar:", 10.5f);
+        mb1Label->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*mb1Label, 20);
+        Canvas::setTop(*mb1Label, 82);
+        page->addChild(mb1Label);
+
+        auto mb1 = make<MenuBar>();
+        mb1->setwidth(800);
+
+        {
+            auto& file = mb1->addMenu("File");
+            file.addItem(IconName::FileNew,  "New File",      "Ctrl+N",  [setStatus]{ setStatus("File > New File"); });
+            file.addItem(IconName::FileOpen, "Open File...",   "Ctrl+O",  [setStatus]{ setStatus("File > Open File"); });
+            file.addItem(IconName::Save,     "Save",           "Ctrl+S",  [setStatus]{ setStatus("File > Save"); });
+            file.addItem(IconName::SaveAs,   "Save As...",     "Ctrl+Shift+S", [setStatus]{ setStatus("File > Save As"); });
+            file.addSeparator();
+            file.addItem("Settings...", [setStatus]{ setStatus("File > Settings"); });
+            file.addSeparator();
+            file.addItem("Exit", [setStatus]{ setStatus("File > Exit"); });
+        }
+        {
+            auto& edit = mb1->addMenu("Edit");
+            edit.addItem(IconName::Undo,  "Undo",  "Ctrl+Z",       [setStatus]{ setStatus("Edit > Undo"); });
+            edit.addItem(IconName::Redo,  "Redo",  "Ctrl+Shift+Z", [setStatus]{ setStatus("Edit > Redo"); });
+            edit.addSeparator();
+            edit.addItem(IconName::Cut,   "Cut",   "Ctrl+X", [setStatus]{ setStatus("Edit > Cut"); });
+            edit.addItem(IconName::Copy,  "Copy",  "Ctrl+C", [setStatus]{ setStatus("Edit > Copy"); });
+            edit.addItem(IconName::Paste, "Paste", "Ctrl+V", [setStatus]{ setStatus("Edit > Paste"); });
+            edit.addSeparator();
+            edit.addItem(IconName::Search, "Find...", "Ctrl+F", [setStatus]{ setStatus("Edit > Find"); });
+        }
+        {
+            auto& view = mb1->addMenu("View");
+            view.addItem(IconName::Eye,     "Show Sidebar",    "",       [setStatus]{ setStatus("View > Show Sidebar"); });
+            view.addItem(IconName::Menu,    "Command Palette", "Ctrl+P", [setStatus]{ setStatus("View > Command Palette"); });
+            view.addSeparator();
+            view.addItem(IconName::Plus,    "Zoom In",   "Ctrl+=", [setStatus]{ setStatus("View > Zoom In"); });
+            view.addItem(IconName::Minus,   "Zoom Out",  "Ctrl+-", [setStatus]{ setStatus("View > Zoom Out"); });
+            view.addItem(IconName::Refresh, "Reset Zoom", "",      [setStatus]{ setStatus("View > Reset Zoom"); });
+        }
+        {
+            auto& help = mb1->addMenu("Help");
+            help.addItem(IconName::Info,    "About",          "", [setStatus]{ setStatus("Help > About"); });
+            help.addItem(IconName::Star,    "Release Notes",  "", [setStatus]{ setStatus("Help > Release Notes"); });
+            help.addSeparator();
+            help.addItem(IconName::Warning, "Report Issue",   "", [setStatus]{ setStatus("Help > Report Issue"); });
+        }
+
+        Canvas::setLeft(*mb1, 20);
+        Canvas::setTop(*mb1, 98);
+        page->addChild(mb1);
+
+        // ── Menu Bar 2: Compact / minimal ────────────────────────────
+        auto mb2Label = make<Text>("Compact menu (labels only, no icons):", 10.5f);
+        mb2Label->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*mb2Label, 20);
+        Canvas::setTop(*mb2Label, 148);
+        page->addChild(mb2Label);
+
+        auto mb2 = make<MenuBar>();
+        mb2->setwidth(500);
+        mb2->setbarHeight(24.0f);
+        mb2->setbarFontSize(11.0f);
+        mb2->setmenuFontSize(11.0f);
+        mb2->setmenuItemHeight(22.0f);
+        mb2->setmenuMinWidth(140.0f);
+
+        {
+            auto& actions = mb2->addMenu("Actions");
+            actions.addItem("Run",   [setStatus]{ setStatus("Actions > Run"); });
+            actions.addItem("Debug", [setStatus]{ setStatus("Actions > Debug"); });
+            actions.addItem("Build", [setStatus]{ setStatus("Actions > Build"); });
+            actions.addSeparator();
+            actions.addItem("Clean", [setStatus]{ setStatus("Actions > Clean"); });
+        }
+        {
+            auto& tools = mb2->addMenu("Tools");
+            tools.addItem("Terminal",     [setStatus]{ setStatus("Tools > Terminal"); });
+            tools.addItem("Profiler",     [setStatus]{ setStatus("Tools > Profiler"); });
+            tools.addItem("Extensions",   [setStatus]{ setStatus("Tools > Extensions"); });
+        }
+        {
+            auto& win = mb2->addMenu("Window");
+            win.addItem("Minimise",  [setStatus]{ setStatus("Window > Minimise"); });
+            win.addItem("Maximise",  [setStatus]{ setStatus("Window > Maximise"); });
+            win.addSeparator();
+            win.addItem("Close All", [setStatus]{ setStatus("Window > Close All"); });
+        }
+
+        Canvas::setLeft(*mb2, 20);
+        Canvas::setTop(*mb2, 164);
+        page->addChild(mb2);
+
+        // ── Menu Bar 3: With disabled items ──────────────────────────
+        auto mb3Label = make<Text>("Menu with disabled items:", 10.5f);
+        mb3Label->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*mb3Label, 20);
+        Canvas::setTop(*mb3Label, 210);
+        page->addChild(mb3Label);
+
+        auto mb3 = make<MenuBar>();
+        mb3->setwidth(300);
+
+        {
+            auto& file = mb3->addMenu("Project");
+            file.addItem(IconName::FileNew, "New Project",    "", [setStatus]{ setStatus("Project > New"); });
+            file.addItem(IconName::FileOpen,"Open Project",   "", [setStatus]{ setStatus("Project > Open"); });
+            file.addItem(IconName::Save,    "Save Project",   "", nullptr, false);  // disabled
+            file.addItem(IconName::Close,   "Close Project",  "", nullptr, false);  // disabled
+        }
+        {
+            auto& run = mb3->addMenu("Run");
+            run.addItem(IconName::Play, "Start",     "F5",        [setStatus]{ setStatus("Run > Start"); });
+            run.addItem(IconName::Pause,"Break",     "",          nullptr, false);  // disabled
+            run.addItem(IconName::Stop, "Stop",      "Shift+F5",  nullptr, false);  // disabled
+            run.addSeparator();
+            run.addItem(IconName::Settings, "Configure...", "", [setStatus]{ setStatus("Run > Configure"); });
+        }
+
+        Canvas::setLeft(*mb3, 20);
+        Canvas::setTop(*mb3, 226);
+        page->addChild(mb3);
+
+        // Feature list
+        auto features = make<Text>(
+            "Features:\n"
+            " • Click a top-level label to open its dropdown\n"
+            " • Hover another label while open to switch menus\n"
+            " • Items support icons, labels, and shortcut text\n"
+            " • Disabled items are greyed out and non-interactive\n"
+            " • Keyboard nav: Left/Right (switch), Up/Down (items), Enter (select), Esc (close)\n"
+            " • Click outside or press Escape to dismiss",
+            10.0f);
+        features->setforeground(c(130, 130, 155));
+        Canvas::setLeft(*features, 20);
+        Canvas::setTop(*features, 284);
+        page->addChild(features);
+
+        tabControl->addTab("Menu Bar", page);
+    }
+
     _context->setRoot(root);
 
     // Cursor style callback — map gut::CursorType to NSCursor
