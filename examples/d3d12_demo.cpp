@@ -359,6 +359,137 @@ static void BuildUI() {
     textBox->setmargin(Thickness{0, 6, 0, 0});
     tbStack->addChild(textBox);
 
+    // --- Transforms panel ---
+    auto transformPanel = makeRef<Panel>();
+    transformPanel->setwidth(350.0f);
+    transformPanel->setheight(350.0f);
+    transformPanel->setbackground(c(35, 38, 50));
+    transformPanel->setcornerRadius(8.0f);
+    transformPanel->setborderColor(c(60, 65, 90));
+    transformPanel->setborderWidth(1.0f);
+    Canvas::setLeft(*transformPanel, 400.0f);
+    Canvas::setTop(*transformPanel, 410.0f);
+    root->addChild(transformPanel);
+
+    {
+        auto tfStack = makeRef<StackPanel>();
+        tfStack->setorientation(Orientation::Vertical);
+        tfStack->setmargin(Thickness{16, 16, 16, 16});
+        transformPanel->addChild(tfStack);
+
+        auto tfTitle = makeRef<Text>();
+        tfTitle->settext("Transforms");
+        tfTitle->setfontSize(16.0f);
+        tfTitle->setforeground(c(200, 205, 220));
+        tfTitle->setmargin(Thickness{0, 0, 0, 6});
+        tfStack->addChild(tfTitle);
+
+        auto tfSub = makeRef<Text>();
+        tfSub->settext("Scale / Rotate / Skew (Flash-style)");
+        tfSub->setfontSize(12.0f);
+        tfSub->setforeground(c(140, 150, 180));
+        tfSub->setmargin(Thickness{0, 0, 0, 14});
+        tfStack->addChild(tfSub);
+
+        const float pi = 3.14159265f;
+
+        // Row 1: Rotation samples
+        auto row1 = makeRef<StackPanel>(Orientation::Horizontal);
+        row1->setspacing(20.0f);
+
+        for (auto [angle, clr, label] : std::initializer_list<std::tuple<f32, Color, const char*>>{
+                {0.0f, c(80,150,240), "0\xc2\xb0"},
+                {15.0f * pi / 180.0f, c(200,100,60), "15\xc2\xb0"},
+                {45.0f * pi / 180.0f, c(60,180,100), "45\xc2\xb0"},
+                {90.0f * pi / 180.0f, c(220,160,40), "90\xc2\xb0"}}) {
+            auto col = makeRef<StackPanel>(Orientation::Vertical);
+            col->sethorizontalAlignment(HorizontalAlignment::Center);
+            auto box = makeRef<Panel>();
+            box->setwidth(45.0f); box->setheight(45.0f);
+            box->setcornerRadius(6.0f);
+            box->setbackground(clr);
+            box->setrotation(angle);
+            col->addChild(box);
+            auto lbl = makeRef<Text>();
+            lbl->settext(label); lbl->setfontSize(10.0f);
+            lbl->setforeground(c(140, 150, 180));
+            lbl->setmargin(Thickness{0, 6, 0, 0});
+            col->addChild(lbl);
+            row1->addChild(col);
+        }
+        tfStack->addChild(row1);
+
+        // Row 2: Skew samples
+        auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
+        row2->setspacing(20.0f);
+        row2->setmargin(Thickness{0, 24, 0, 0});
+
+        for (auto [skx, sky, clr, label] : std::initializer_list<std::tuple<f32, f32, Color, const char*>>{
+                {15.0f * pi / 180.0f, 0.0f, c(150,80,200), "skX 15\xc2\xb0"},
+                {30.0f * pi / 180.0f, 0.0f, c(50,160,180), "skX 30\xc2\xb0"},
+                {0.0f, 20.0f * pi / 180.0f, c(200,60,100), "skY 20\xc2\xb0"},
+                {10.0f * pi / 180.0f, 10.0f * pi / 180.0f, c(100,180,60), "X+Y"}}) {
+            auto col = makeRef<StackPanel>(Orientation::Vertical);
+            col->sethorizontalAlignment(HorizontalAlignment::Center);
+            auto box = makeRef<Panel>();
+            box->setwidth(45.0f); box->setheight(45.0f);
+            box->setbackground(clr);
+            box->setskewX(skx); box->setskewY(sky);
+            col->addChild(box);
+            auto lbl = makeRef<Text>();
+            lbl->settext(label); lbl->setfontSize(10.0f);
+            lbl->setforeground(c(140, 150, 180));
+            lbl->setmargin(Thickness{0, 6, 0, 0});
+            col->addChild(lbl);
+            row2->addChild(col);
+        }
+        tfStack->addChild(row2);
+
+        // Row 3: Combined transforms
+        auto row3 = makeRef<StackPanel>(Orientation::Horizontal);
+        row3->setspacing(20.0f);
+        row3->setmargin(Thickness{0, 24, 0, 0});
+
+        {
+            auto col = makeRef<StackPanel>(Orientation::Vertical);
+            col->sethorizontalAlignment(HorizontalAlignment::Center);
+            auto box = makeRef<Panel>();
+            box->setwidth(55.0f); box->setheight(55.0f);
+            box->setcornerRadius(8.0f);
+            box->setbackground(c(220, 80, 120));
+            box->setscaleX(1.2f); box->setscaleY(0.8f);
+            box->setrotation(25.0f * pi / 180.0f);
+            box->setskewX(10.0f * pi / 180.0f);
+            col->addChild(box);
+            auto lbl = makeRef<Text>();
+            lbl->settext("S+R+Sk"); lbl->setfontSize(10.0f);
+            lbl->setforeground(c(140, 150, 180));
+            lbl->setmargin(Thickness{0, 6, 0, 0});
+            col->addChild(lbl);
+            row3->addChild(col);
+        }
+
+        {
+            auto btn = makeRef<Button>();
+            btn->setlabel("Rotated Btn");
+            btn->setwidth(110.0f);
+            btn->setheight(32.0f);
+            btn->setrotation(10.0f * pi / 180.0f);
+            row3->addChild(btn);
+        }
+
+        {
+            auto btn = makeRef<Button>();
+            btn->setlabel("Skewed Btn");
+            btn->setwidth(110.0f);
+            btn->setheight(32.0f);
+            btn->setskewX(12.0f * pi / 180.0f);
+            row3->addChild(btn);
+        }
+
+        tfStack->addChild(row3);
+    }
+
     // --- Status bar ---
     auto statusBar = makeRef<Panel>();
     statusBar->setwidth(static_cast<f32>(g_width));

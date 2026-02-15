@@ -1576,6 +1576,443 @@ static void BuildUI() {
         tabs->addTab("Drawing", page);
     }
 
+    // =================================================================
+    // TAB 7 — Transforms (Scale / Rotate / Skew)
+    // =================================================================
+    {
+        auto page = makeRef<StackPanel>(Orientation::Horizontal);
+        page->setmargin(Thickness{24, 24, 24, 24});
+        page->setspacing(20.0f);
+
+        // --- Column 1: Rotation ---
+        auto col1 = makeRef<StackPanel>(Orientation::Vertical);
+        col1->setspacing(20.0f);
+
+        { // Rotation card
+            auto card = makeCard(320.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Rotation"));
+            inner->addChild(makeLabel("Per-element rotation around centre"));
+
+            auto row = makeRef<StackPanel>(Orientation::Horizontal);
+            row->setspacing(28.0f);
+            row->setmargin(Thickness{10, 20, 0, 0});
+
+            const float pi = 3.14159265f;
+
+            // 0 degrees
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(80, 150, 240));
+                col->addChild(box);
+                auto lbl = makeLabel("0\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            // 15 degrees
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(200, 100, 60));
+                box->setrotation(15.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("15\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            // 45 degrees
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(60, 180, 100));
+                box->setrotation(45.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("45\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            // 90 degrees
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(220, 160, 40));
+                box->setrotation(90.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("90\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            inner->addChild(row);
+
+            // Second row: more rotations
+            auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
+            row2->setspacing(28.0f);
+            row2->setmargin(Thickness{10, 28, 0, 0});
+
+            // 180 degrees
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(60.0f); box->setheight(35.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(150, 80, 200));
+                box->setrotation(pi);
+                auto t = makeRef<Text>();
+                t->settext("Hi"); t->setfontSize(14.0f);
+                t->setforeground(c(255, 255, 255));
+                t->setmargin(Thickness{8, 6, 0, 0});
+                box->addChild(t);
+                col->addChild(box);
+                auto lbl = makeLabel("180\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row2->addChild(col);
+            }
+
+            // -30 degrees
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(60.0f); box->setheight(35.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(50, 160, 180));
+                box->setrotation(-30.0f * pi / 180.0f);
+                auto t = makeRef<Text>();
+                t->settext("Tilt"); t->setfontSize(14.0f);
+                t->setforeground(c(255, 255, 255));
+                t->setmargin(Thickness{6, 6, 0, 0});
+                box->addChild(t);
+                col->addChild(box);
+                auto lbl = makeLabel("-30\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row2->addChild(col);
+            }
+
+            inner->addChild(row2);
+            card->addChild(inner);
+            col1->addChild(card);
+        }
+
+        { // Rotated button card
+            auto card = makeCard(320.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Rotated Button"));
+            inner->addChild(makeLabel("Interactive at 10\xc2\xb0 rotation"));
+
+            auto btn = makeRef<Button>();
+            btn->setlabel("Click Me");
+            btn->setwidth(120.0f);
+            btn->setheight(36.0f);
+            btn->setrotation(10.0f * 3.14159265f / 180.0f);
+            btn->setmargin(Thickness{20, 24, 0, 0});
+            inner->addChild(btn);
+
+            card->addChild(inner);
+            col1->addChild(card);
+        }
+
+        page->addChild(col1);
+
+        // --- Column 2: Skew ---
+        auto col2 = makeRef<StackPanel>(Orientation::Vertical);
+        col2->setspacing(20.0f);
+
+        { // Skew card
+            auto card = makeCard(320.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Skew"));
+            inner->addChild(makeLabel("Horizontal and vertical shear"));
+
+            const float pi = 3.14159265f;
+            auto row = makeRef<StackPanel>(Orientation::Horizontal);
+            row->setspacing(28.0f);
+            row->setmargin(Thickness{10, 20, 0, 0});
+
+            // SkewX 15 deg
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setbackground(c(80, 150, 240));
+                box->setskewX(15.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("skewX 15\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            // SkewX 30 deg
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setbackground(c(200, 100, 60));
+                box->setskewX(30.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("skewX 30\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            // SkewY 20 deg
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setbackground(c(60, 180, 100));
+                box->setskewY(20.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("skewY 20\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            inner->addChild(row);
+
+            // Second row: combined skew
+            auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
+            row2->setspacing(28.0f);
+            row2->setmargin(Thickness{10, 28, 0, 0});
+
+            // Both axes
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(60.0f); box->setheight(60.0f);
+                box->setbackground(c(220, 160, 40));
+                box->setskewX(15.0f * pi / 180.0f);
+                box->setskewY(10.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("X+Y skew", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row2->addChild(col);
+            }
+
+            // Italic-style text skew
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(80.0f); box->setheight(40.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(150, 80, 200));
+                box->setskewX(-12.0f * pi / 180.0f);
+                auto t = makeRef<Text>();
+                t->settext("Slanted"); t->setfontSize(14.0f);
+                t->setforeground(c(255, 255, 255));
+                t->setmargin(Thickness{10, 8, 0, 0});
+                box->addChild(t);
+                col->addChild(box);
+                auto lbl = makeLabel("skewX -12\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row2->addChild(col);
+            }
+
+            inner->addChild(row2);
+            card->addChild(inner);
+            col2->addChild(card);
+        }
+
+        { // Skewed button card
+            auto card = makeCard(320.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Skewed Button"));
+            inner->addChild(makeLabel("Interactive with skewX"));
+
+            auto btn = makeRef<Button>();
+            btn->setlabel("Click Me");
+            btn->setwidth(120.0f);
+            btn->setheight(36.0f);
+            btn->setskewX(15.0f * 3.14159265f / 180.0f);
+            btn->setmargin(Thickness{20, 24, 0, 0});
+            inner->addChild(btn);
+
+            card->addChild(inner);
+            col2->addChild(card);
+        }
+
+        page->addChild(col2);
+
+        // --- Column 3: Combined Transforms ---
+        auto col3 = makeRef<StackPanel>(Orientation::Vertical);
+        col3->setspacing(20.0f);
+
+        { // Combined transforms card
+            auto card = makeCard(320.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Combined Transforms"));
+            inner->addChild(makeLabel("Scale + Rotate + Skew together"));
+
+            const float pi = 3.14159265f;
+            auto row = makeRef<StackPanel>(Orientation::Horizontal);
+            row->setspacing(28.0f);
+            row->setmargin(Thickness{10, 20, 0, 0});
+
+            // Scale + Rotate
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(80, 150, 240));
+                box->setscaleX(1.3f); box->setscaleY(1.3f);
+                box->setrotation(20.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("1.3x + 20\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            // Rotate + Skew
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setbackground(c(200, 100, 60));
+                box->setrotation(-15.0f * pi / 180.0f);
+                box->setskewX(20.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("-15\xc2\xb0 + skX", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            // Scale + Skew
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(50.0f); box->setheight(50.0f);
+                box->setcornerRadius(6.0f);
+                box->setbackground(c(60, 180, 100));
+                box->setscaleX(1.4f);
+                box->setskewY(15.0f * pi / 180.0f);
+                col->addChild(box);
+                auto lbl = makeLabel("1.4x + skY", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row->addChild(col);
+            }
+
+            inner->addChild(row);
+
+            // Second row: all three combined
+            auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
+            row2->setspacing(28.0f);
+            row2->setmargin(Thickness{10, 28, 0, 0});
+
+            // All three
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(70.0f); box->setheight(70.0f);
+                box->setcornerRadius(8.0f);
+                box->setbackground(c(220, 80, 120));
+                box->setscaleX(1.2f); box->setscaleY(0.8f);
+                box->setrotation(25.0f * pi / 180.0f);
+                box->setskewX(10.0f * pi / 180.0f);
+                auto t = makeRef<Text>();
+                t->settext("All 3"); t->setfontSize(13.0f);
+                t->setforeground(c(255, 255, 255));
+                t->setmargin(Thickness{12, 24, 0, 0});
+                box->addChild(t);
+                col->addChild(box);
+                auto lbl = makeLabel("S+R+Sk", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row2->addChild(col);
+            }
+
+            // Rounded rect with combined
+            {
+                auto col = makeRef<StackPanel>(Orientation::Vertical);
+                col->sethorizontalAlignment(HorizontalAlignment::Center);
+                auto box = makeRef<Panel>();
+                box->setwidth(80.0f); box->setheight(50.0f);
+                box->setcornerRadius(25.0f);
+                box->setbackground(c(255, 200, 60));
+                box->setrotation(30.0f * pi / 180.0f);
+                box->setscaleX(1.2f);
+                col->addChild(box);
+                auto lbl = makeLabel("Pill 30\xc2\xb0", 10.0f);
+                lbl->setmargin(Thickness{0, 8, 0, 0});
+                col->addChild(lbl);
+                row2->addChild(col);
+            }
+
+            inner->addChild(row2);
+            card->addChild(inner);
+            col3->addChild(card);
+        }
+
+        { // Combined interactive button
+            auto card = makeCard(320.0f);
+            auto inner = makeRef<StackPanel>(Orientation::Vertical);
+            inner->setmargin(Thickness{16, 16, 16, 16});
+            inner->addChild(makeHeading("Full Transform Button"));
+            inner->addChild(makeLabel("Scale + Rotate + Skew hit-test"));
+
+            auto btn = makeRef<Button>();
+            btn->setlabel("Click Me");
+            btn->setwidth(130.0f);
+            btn->setheight(36.0f);
+            btn->setscaleX(1.2f); btn->setscaleY(1.2f);
+            btn->setrotation(12.0f * 3.14159265f / 180.0f);
+            btn->setskewX(8.0f * 3.14159265f / 180.0f);
+            btn->setmargin(Thickness{20, 24, 0, 0});
+            inner->addChild(btn);
+
+            card->addChild(inner);
+            col3->addChild(card);
+        }
+
+        page->addChild(col3);
+        tabs->addTab("Transforms", page);
+    }
+
     root->addChild(tabs);
     g_gutCtx->setRoot(root);
 }
