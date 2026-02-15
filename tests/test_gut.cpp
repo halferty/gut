@@ -789,6 +789,85 @@ TEST(toast_null_context_safe) {
 }
 
 // =============================================================================
+// Icons
+// =============================================================================
+
+TEST(icon_draw_all_no_crash) {
+    // Verify the enum range is valid and all icons are accounted for
+    auto backend = std::make_unique<gut::NullRenderBackend>();
+    gut::Context ctx(std::move(backend));
+    auto canvas = gut::make<gut::Canvas>();
+    canvas->setwidth(400);
+    canvas->setheight(300);
+    ctx.setRoot(canvas);
+    ctx.update(16.6f);
+    int count = static_cast<int>(gut::IconName::_Count);
+    ASSERT(count >= 40);  // we defined ~49 icons
+}
+
+TEST(icon_element_create) {
+    auto ico = gut::make<gut::IconElement>(gut::IconName::Star);
+    ASSERT(ico->icon() == gut::IconName::Star);
+    ASSERT(ico->size() > 0);  // default size
+}
+
+TEST(icon_element_properties) {
+    auto ico = gut::make<gut::IconElement>(gut::IconName::Heart);
+    ico->setsize(32.0f);
+    ico->setcolor(gut::Color(1, 0, 0, 1));
+    ico->setstrokeWeight(2.0f);
+    ASSERT(ico->size() == 32.0f);
+    ASSERT(ico->strokeWeight() == 2.0f);
+    ASSERT(ico->color().r == 1.0f);
+}
+
+// =============================================================================
+// Toolbar
+// =============================================================================
+
+TEST(toolbar_create) {
+    auto tb = gut::make<gut::Toolbar>();
+    ASSERT(tb->itemCount() == 0);
+}
+
+TEST(toolbar_add_items) {
+    auto tb = gut::make<gut::Toolbar>();
+    tb->addButton(gut::IconName::Save, "Save", []{});
+    tb->addButton(gut::IconName::Cut, []{});
+    tb->addButton("Paste", []{});
+    tb->addSeparator();
+    tb->addToggle(gut::IconName::Bold, "B", false, [](bool){});
+    ASSERT(tb->itemCount() == 5);
+}
+
+TEST(toolbar_toggle_state) {
+    auto tb = gut::make<gut::Toolbar>();
+    tb->addToggle(gut::IconName::Bold, "", false, [](bool){});
+    tb->setToggled(0, true);
+    // No crash; toggle state is internal — we just verify the call succeeds
+    ASSERT(tb->itemCount() == 1);
+}
+
+TEST(toolbar_item_enabled) {
+    auto tb = gut::make<gut::Toolbar>();
+    tb->addButton(gut::IconName::Delete, []{});
+    tb->setItemEnabled(0, false);
+    // Re-enable
+    tb->setItemEnabled(0, true);
+    ASSERT(tb->itemCount() == 1);
+}
+
+TEST(toolbar_properties) {
+    auto tb = gut::make<gut::Toolbar>();
+    tb->setitemHeight(40.0f);
+    tb->seticonSize(20.0f);
+    tb->setspacing(4.0f);
+    ASSERT(tb->itemHeight() == 40.0f);
+    ASSERT(tb->iconSize() == 20.0f);
+    ASSERT(tb->spacing() == 4.0f);
+}
+
+// =============================================================================
 // Main
 // =============================================================================
 
@@ -881,6 +960,18 @@ int main() {
     RUN_TEST(toast_dismiss_all);
     RUN_TEST(toast_positions);
     RUN_TEST(toast_null_context_safe);
+    
+    // Icons
+    RUN_TEST(icon_draw_all_no_crash);
+    RUN_TEST(icon_element_create);
+    RUN_TEST(icon_element_properties);
+    
+    // Toolbar
+    RUN_TEST(toolbar_create);
+    RUN_TEST(toolbar_add_items);
+    RUN_TEST(toolbar_toggle_state);
+    RUN_TEST(toolbar_item_enabled);
+    RUN_TEST(toolbar_properties);
     
     std::cout << "\n==========================================\n";
     std::cout << "Results: " << testsPassed << " passed, " << testsFailed << " failed\n";

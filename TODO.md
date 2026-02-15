@@ -1,6 +1,6 @@
 # Gut Toolkit Roadmap
 
-**Score: 80 done, 2 partial, 12 punted, 15 remaining** out of 109 features.
+**Score: 81 done, 2 partial, 12 punted, 14 remaining** out of 109 features.
 
 ---
 
@@ -95,7 +95,7 @@
 - [x] Dialog / Modal — modal overlay with backdrop, draggable title bar, close (X), configurable buttons (OK/Cancel/Yes/No), word-wrapping message, Escape/Enter keys
 - [x] Toast / Notification — auto-dismissing overlay, 6 positions (TopLeft/TopCenter/TopRight/BottomLeft/BottomCenter/BottomRight), stacking, fade-in/out, configurable duration, global Style
 - [p] Splitter / Resizable panels (PUNT)
-- [ ] Toolbar
+- [x] Toolbar — horizontal strip with icon buttons, toggles, separators; procedural Icon system (50 icons), hover/press/toggle states
 - [ ] Menu bar
 - [ ] Expander / Accordion
 - [ ] Badge / Tag

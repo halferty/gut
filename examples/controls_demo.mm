@@ -3222,6 +3222,187 @@ private:
         tabControl->addTab("Toast", page);
     }
 
+    // =================================================================
+    //  Tab 12 — Icons & Toolbar
+    // =================================================================
+    {
+        auto page = make<Canvas>();
+        page->setwidth(900);
+        page->setheight(700);
+
+        // ── Section 1: Icon Gallery ──────────────────────────────────
+        auto hdrIcons = make<Text>("Icon Gallery", 16.0f);
+        hdrIcons->setforeground(Color::white());
+        Canvas::setLeft(*hdrIcons, 20);
+        Canvas::setTop(*hdrIcons, 12);
+        page->addChild(hdrIcons);
+
+        auto subIcons = make<Text>("All built-in procedural icons (drawn with lines, rects, ellipses, polygons — no fonts or textures).", 10.5f);
+        subIcons->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*subIcons, 20);
+        Canvas::setTop(*subIcons, 34);
+        page->addChild(subIcons);
+
+        // Grid of all icons
+        struct IconInfo { IconName name; const char* label; };
+        IconInfo allIcons[] = {
+            {IconName::FileNew, "FileNew"}, {IconName::FileOpen, "FileOpen"}, {IconName::Save, "Save"},
+            {IconName::SaveAs, "SaveAs"}, {IconName::Cut, "Cut"}, {IconName::Copy, "Copy"},
+            {IconName::Paste, "Paste"}, {IconName::Undo, "Undo"}, {IconName::Redo, "Redo"},
+            {IconName::Delete, "Delete"}, {IconName::Bold, "Bold"}, {IconName::Italic, "Italic"},
+            {IconName::Underline, "Underline"}, {IconName::Strikethrough, "Strike"}, {IconName::AlignLeft, "AlignL"},
+            {IconName::AlignCenter, "AlignC"}, {IconName::AlignRight, "AlignR"}, {IconName::ArrowUp, "ArrowUp"},
+            {IconName::ArrowDown, "ArrowDn"}, {IconName::ArrowLeft, "ArrowL"}, {IconName::ArrowRight, "ArrowR"},
+            {IconName::Home, "Home"}, {IconName::Search, "Search"}, {IconName::Refresh, "Refresh"},
+            {IconName::Plus, "Plus"}, {IconName::Minus, "Minus"}, {IconName::Close, "Close"},
+            {IconName::Check, "Check"}, {IconName::Settings, "Settings"}, {IconName::Menu, "Menu"},
+            {IconName::MoreHorizontal, "More..."}, {IconName::MoreVertical, "MoreV"}, {IconName::Play, "Play"},
+            {IconName::Pause, "Pause"}, {IconName::Stop, "Stop"}, {IconName::SkipForward, "SkipFwd"},
+            {IconName::SkipBack, "SkipBack"}, {IconName::Info, "Info"}, {IconName::Warning, "Warning"},
+            {IconName::Error, "Error"}, {IconName::Star, "Star"}, {IconName::Heart, "Heart"},
+            {IconName::Eye, "Eye"}, {IconName::EyeOff, "EyeOff"}, {IconName::Lock, "Lock"},
+            {IconName::Unlock, "Unlock"}, {IconName::User, "User"}, {IconName::Download, "Download"},
+            {IconName::Upload, "Upload"},
+        };
+        int iconCount = sizeof(allIcons) / sizeof(allIcons[0]);
+        int cols = 10;
+        f32 cellW = 80.0f, cellH = 52.0f;
+        f32 gridX = 20.0f, gridY = 55.0f;
+
+        for (int i = 0; i < iconCount; ++i) {
+            int col = i % cols;
+            int row = i / cols;
+            f32 cx = gridX + col * cellW;
+            f32 cy = gridY + row * cellH;
+
+            // Icon element
+            auto ico = make<IconElement>(allIcons[i].name);
+            ico->setsize(22.0f);
+            ico->setcolor(c(200, 210, 240));
+            Canvas::setLeft(*ico, cx + (cellW - 22) * 0.5f);
+            Canvas::setTop(*ico, cy);
+            page->addChild(ico);
+
+            // Label
+            auto lbl = make<Text>(allIcons[i].label, 8.5f);
+            lbl->setforeground(c(130, 130, 155));
+            Canvas::setLeft(*lbl, cx + 2);
+            Canvas::setTop(*lbl, cy + 26);
+            page->addChild(lbl);
+        }
+
+        // ── Section 2: Toolbars ──────────────────────────────────────
+        f32 tbY = gridY + (static_cast<f32>((iconCount + cols - 1) / cols)) * cellH + 16.0f;
+
+        auto hdrToolbar = make<Text>("Toolbar Demos", 14.0f);
+        hdrToolbar->setforeground(Color::white());
+        Canvas::setLeft(*hdrToolbar, 20);
+        Canvas::setTop(*hdrToolbar, tbY);
+        page->addChild(hdrToolbar);
+
+        // ─── Toolbar 1: File operations ──────────────────────────────
+        auto tb1Label = make<Text>("File toolbar (icon-only buttons with tooltips):", 10.5f);
+        tb1Label->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*tb1Label, 20);
+        Canvas::setTop(*tb1Label, tbY + 22);
+        page->addChild(tb1Label);
+
+        auto tb1 = make<Toolbar>();
+        tb1->setwidth(500);
+        tb1->setitemHeight(34.0f);
+        tb1->seticonSize(18.0f);
+        tb1->addButton(IconName::FileNew,  [ctx = _context.get()]{ Toast::show(ctx, "New File", ToastPosition::BottomRight, 1.5f); }, "New File");
+        tb1->addButton(IconName::FileOpen, [ctx = _context.get()]{ Toast::show(ctx, "Open File", ToastPosition::BottomRight, 1.5f); }, "Open");
+        tb1->addButton(IconName::Save,     [ctx = _context.get()]{ Toast::show(ctx, "Saved!", ToastPosition::BottomRight, 1.5f); }, "Save");
+        tb1->addSeparator();
+        tb1->addButton(IconName::Cut,  [ctx = _context.get()]{ Toast::show(ctx, "Cut", ToastPosition::BottomRight, 1.0f); }, "Cut (Cmd+X)");
+        tb1->addButton(IconName::Copy, [ctx = _context.get()]{ Toast::show(ctx, "Copied", ToastPosition::BottomRight, 1.0f); }, "Copy (Cmd+C)");
+        tb1->addButton(IconName::Paste,[ctx = _context.get()]{ Toast::show(ctx, "Pasted", ToastPosition::BottomRight, 1.0f); }, "Paste (Cmd+V)");
+        tb1->addSeparator();
+        tb1->addButton(IconName::Undo, [ctx = _context.get()]{ Toast::show(ctx, "Undo", ToastPosition::BottomRight, 1.0f); }, "Undo");
+        tb1->addButton(IconName::Redo, [ctx = _context.get()]{ Toast::show(ctx, "Redo", ToastPosition::BottomRight, 1.0f); }, "Redo");
+        tb1->addSeparator();
+        tb1->addButton(IconName::Search, []{}, "Search");
+        tb1->addButton(IconName::Settings, []{}, "Settings");
+        Canvas::setLeft(*tb1, 20);
+        Canvas::setTop(*tb1, tbY + 38);
+        page->addChild(tb1);
+
+        // ─── Toolbar 2: Text formatting with toggles ────────────────
+        auto tb2Label = make<Text>("Formatting toolbar (toggle buttons):", 10.5f);
+        tb2Label->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*tb2Label, 20);
+        Canvas::setTop(*tb2Label, tbY + 82);
+        page->addChild(tb2Label);
+
+        auto tb2 = make<Toolbar>();
+        tb2->setwidth(500);
+        tb2->setitemHeight(32.0f);
+        tb2->seticonSize(16.0f);
+        tb2->addToggle(IconName::Bold, "", false, [](bool){}, "Bold (Cmd+B)");
+        tb2->addToggle(IconName::Italic, "", false, [](bool){}, "Italic (Cmd+I)");
+        tb2->addToggle(IconName::Underline, "", false, [](bool){}, "Underline (Cmd+U)");
+        tb2->addToggle(IconName::Strikethrough, "", false, [](bool){}, "Strikethrough");
+        tb2->addSeparator();
+        tb2->addButton(IconName::AlignLeft, []{}, "Align Left");
+        tb2->addButton(IconName::AlignCenter, []{}, "Align Center");
+        tb2->addButton(IconName::AlignRight, []{}, "Align Right");
+        Canvas::setLeft(*tb2, 20);
+        Canvas::setTop(*tb2, tbY + 98);
+        page->addChild(tb2);
+
+        // ─── Toolbar 3: Media player with labels ────────────────────
+        auto tb3Label = make<Text>("Media toolbar (icons + labels):", 10.5f);
+        tb3Label->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*tb3Label, 20);
+        Canvas::setTop(*tb3Label, tbY + 142);
+        page->addChild(tb3Label);
+
+        auto tb3 = make<Toolbar>();
+        tb3->setwidth(500);
+        tb3->setitemHeight(34.0f);
+        tb3->seticonSize(16.0f);
+        tb3->addButton(IconName::SkipBack, "Prev", []{}, "Previous Track");
+        tb3->addButton(IconName::Play,     "Play", []{}, "Play");
+        tb3->addButton(IconName::Pause,    "Pause",[]{}, "Pause");
+        tb3->addButton(IconName::Stop,     "Stop", []{}, "Stop");
+        tb3->addButton(IconName::SkipForward, "Next", []{}, "Next Track");
+        tb3->addSeparator();
+        tb3->addButton(IconName::Refresh,  "Repeat",[]{}, "Repeat");
+        Canvas::setLeft(*tb3, 20);
+        Canvas::setTop(*tb3, tbY + 158);
+        page->addChild(tb3);
+
+        // ─── Toolbar 4: Misc with disabled items ────────────────────
+        auto tb4Label = make<Text>("Misc toolbar (some items disabled):", 10.5f);
+        tb4Label->setforeground(c(160, 160, 180));
+        Canvas::setLeft(*tb4Label, 20);
+        Canvas::setTop(*tb4Label, tbY + 202);
+        page->addChild(tb4Label);
+
+        auto tb4 = make<Toolbar>();
+        tb4->setwidth(500);
+        tb4->setitemHeight(34.0f);
+        tb4->seticonSize(18.0f);
+        tb4->addButton(IconName::Download, []{}, "Download");
+        tb4->addButton(IconName::Upload,   []{}, "Upload");
+        tb4->addSeparator();
+        tb4->addButton(IconName::Lock,  []{}, "Lock");
+        tb4->addButton(IconName::Eye,   []{}, "Show");
+        tb4->addButton(IconName::Star,  []{}, "Favourite");
+        tb4->addButton(IconName::Heart, []{}, "Like");
+        tb4->addSeparator();
+        tb4->addButton(IconName::Delete,[]{}, "Delete (disabled)");
+        tb4->setItemEnabled(tb4->itemCount() - 1, false);
+        tb4->addButton(IconName::Warning,[]{}, "Warning (disabled)");
+        tb4->setItemEnabled(tb4->itemCount() - 1, false);
+        Canvas::setLeft(*tb4, 20);
+        Canvas::setTop(*tb4, tbY + 218);
+        page->addChild(tb4);
+
+        tabControl->addTab("Icons & Toolbar", page);
+    }
+
     _context->setRoot(root);
 
     // Cursor style callback — map gut::CursorType to NSCursor

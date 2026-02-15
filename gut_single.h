@@ -6259,6 +6259,256 @@ private:
 } // namespace gut
 
 
+// --- gut/elements/Icon.h ---
+
+namespace gut {
+
+/**
+ * @brief Built-in procedural icon identifiers.
+ *
+ * Each icon is drawn using RenderContext primitives (lines, rects, ellipses,
+ * polygons) so there is no dependency on external assets or icon fonts.
+ */
+enum class IconName : u8 {
+    None = 0,
+
+    // --- File / document ---
+    FileNew,        ///< blank page
+    FileOpen,       ///< folder
+    Save,           ///< floppy disk
+    SaveAs,         ///< floppy + pencil
+
+    // --- Edit ---
+    Cut,            ///< scissors
+    Copy,           ///< two overlapping pages
+    Paste,          ///< clipboard
+    Undo,           ///< curved arrow left
+    Redo,           ///< curved arrow right
+    Delete,         ///< trash can
+
+    // --- Text formatting ---
+    Bold,           ///< B
+    Italic,         ///< I (slanted)
+    Underline,      ///< U with underline
+    Strikethrough,  ///< S with strikethrough
+    AlignLeft,      ///< 3 left-aligned lines
+    AlignCenter,    ///< 3 centred lines
+    AlignRight,     ///< 3 right-aligned lines
+
+    // --- Navigation ---
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+    Home,           ///< house
+    Search,         ///< magnifying glass
+    Refresh,        ///< circular arrow
+
+    // --- Actions ---
+    Plus,           ///< +
+    Minus,          ///< −
+    Close,          ///< X
+    Check,          ///< checkmark
+    Settings,       ///< gear / cog
+    Menu,           ///< hamburger (3 horizontal lines)
+    MoreHorizontal, ///< three dots (...)
+    MoreVertical,   ///< three vertical dots
+
+    // --- Media ---
+    Play,           ///< right triangle
+    Pause,          ///< two bars
+    Stop,           ///< solid square
+    SkipForward,    ///< >>|
+    SkipBack,       ///< |<<
+
+    // --- Misc ---
+    Info,           ///< circled i
+    Warning,        ///< triangle with !
+    Error,          ///< circled X
+    Star,           ///< 5-point star
+    Heart,          ///< heart shape
+    Eye,            ///< eye (visible)
+    EyeOff,         ///< eye with line through
+    Lock,           ///< padlock
+    Unlock,         ///< open padlock
+    User,           ///< person silhouette
+    Download,       ///< arrow pointing down into tray
+    Upload,         ///< arrow pointing up from tray
+
+    _Count
+};
+
+/**
+ * @brief Static helper to draw built-in procedural icons.
+ *
+ * Usage:
+ *     Icon::draw(ctx, IconName::Save, {10, 10, 20, 20}, Color::white());
+ *
+ * Icons are drawn within the given bounds rectangle, scaled proportionally.
+ * A stroke thickness is derived from the icon size for crisp rendering.
+ */
+class GUT_API Icon {
+public:
+    /// Draw an icon into the given bounds.
+    static void draw(RenderContext& ctx, IconName name, Rectf bounds, Color color,
+                     f32 strokeWeight = 0.0f);
+
+    /// Convenience: draw centred within a square of `size` at position.
+    static void draw(RenderContext& ctx, IconName name, Point2f pos, f32 size, Color color,
+                     f32 strokeWeight = 0.0f);
+
+private:
+    Icon() = default;
+};
+
+/**
+ * @brief Element that displays a built-in icon.
+ *
+ * Usage:
+ *     auto icon = make<IconElement>(IconName::Save);
+ *     icon->setsize(24.0f);
+ *     icon->setcolor(Color::white());
+ */
+class GUT_API IconElement : public Element {
+    GUT_OBJECT(IconElement, Element)
+
+public:
+    IconElement() = default;
+    explicit IconElement(IconName name);
+    ~IconElement() override = default;
+
+    GUT_PROPERTY(IconName, icon, IconName::None)
+    GUT_PROPERTY(f32, size, 20.0f)
+    GUT_PROPERTY(Color, color, Color::white())
+    GUT_PROPERTY(f32, strokeWeight, 0.0f)
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+};
+
+} // namespace gut
+
+
+// --- gut/elements/Toolbar.h ---
+
+namespace gut {
+
+/**
+ * @brief The type of a toolbar item.
+ */
+enum class ToolbarItemType : u8 {
+    Button,     ///< Clickable button with icon and/or label
+    Toggle,     ///< Like Button but has pressed/toggled state
+    Separator,  ///< Thin vertical divider
+};
+
+/**
+ * @brief A horizontal strip of icon buttons, toggles, and separators.
+ *
+ * Usage:
+ *     auto tb = make<Toolbar>();
+ *     tb->addButton(IconName::Cut,  "Cut",   [&]{ doCut(); },  "Cut (Cmd+X)");
+ *     tb->addButton(IconName::Copy, "Copy",  [&]{ doCopy(); }, "Copy (Cmd+C)");
+ *     tb->addSeparator();
+ *     tb->addToggle(IconName::Bold, "B", isBold, [&](bool v){ setBold(v); }, "Bold");
+ */
+class GUT_API Toolbar : public Element {
+    GUT_OBJECT(Toolbar, Element)
+
+public:
+    Toolbar();
+    ~Toolbar() override = default;
+
+    // -------------------------------------------------------------------------
+    // Items
+    // -------------------------------------------------------------------------
+
+    struct Item {
+        ToolbarItemType type{ToolbarItemType::Button};
+        IconName icon{IconName::None};
+        String label;
+        String tooltip;
+        std::function<void()> onClick;              // Button
+        std::function<void(bool)> onToggled;        // Toggle
+        bool toggled{false};
+        bool enabled{true};
+    };
+
+    /// Add a button with icon and/or label, optional tooltip.
+    void addButton(IconName icon, String label, std::function<void()> action,
+                   String tooltip = "");
+
+    /// Add an icon-only button.
+    void addButton(IconName icon, std::function<void()> action, String tooltip = "");
+
+    /// Add a label-only button.
+    void addButton(String label, std::function<void()> action, String tooltip = "");
+
+    /// Add a toggle button (icon + optional label).
+    void addToggle(IconName icon, String label, bool initialState,
+                   std::function<void(bool)> onToggled, String tooltip = "");
+
+    /// Add a vertical separator.
+    void addSeparator();
+
+    /// Access items for runtime modification.
+    usize itemCount() const { return m_items.size(); }
+    Item& itemAt(usize index) { return m_items[index]; }
+    const Item& itemAt(usize index) const { return m_items[index]; }
+
+    /// Set the toggled state of a toggle item by index.
+    void setToggled(usize index, bool value);
+
+    /// Enable / disable an item by index.
+    void setItemEnabled(usize index, bool enabled);
+
+    // -------------------------------------------------------------------------
+    // Appearance
+    // -------------------------------------------------------------------------
+
+    GUT_PROPERTY(f32, itemHeight, 32.0f)
+    GUT_PROPERTY(f32, itemPadding, 6.0f)     // horizontal padding inside each item
+    GUT_PROPERTY(f32, iconSize, 16.0f)
+    GUT_PROPERTY(f32, fontSize, 11.0f)
+    GUT_PROPERTY(f32, separatorWidth, 1.0f)
+    GUT_PROPERTY(f32, spacing, 2.0f)         // gap between items
+
+    GUT_PROPERTY(Color, toolbarBackground, Color::fromHex(0x1E1E2A))
+    GUT_PROPERTY(Color, itemHoverBackground, Color::fromRgba8(55, 55, 70, 255))
+    GUT_PROPERTY(Color, itemPressedBackground, Color::fromRgba8(40, 85, 180, 255))
+    GUT_PROPERTY(Color, itemToggledBackground, Color::fromRgba8(50, 100, 200, 200))
+    GUT_PROPERTY(Color, itemForeground, Color::fromRgba8(200, 200, 220, 255))
+    GUT_PROPERTY(Color, itemDisabledForeground, Color::fromRgba8(90, 90, 110, 255))
+    GUT_PROPERTY(Color, separatorColor, Color::fromRgba8(60, 60, 78, 180))
+    GUT_PROPERTY(Color, borderColor, Color::fromRgba8(50, 50, 65, 200))
+
+protected:
+    Size2f measureOverride(Size2f availableSize) override;
+    void onRender(RenderContext& ctx) override;
+    bool onMouseEvent(const MouseEvent& event) override;
+    void onMouseEnter() override;
+    void onMouseLeave() override;
+
+private:
+    std::vector<Item> m_items;
+    isize m_hoveredItem{-1};
+    isize m_pressedItem{-1};
+
+    struct ItemLayout {
+        Rectf rect;
+        usize itemIndex;
+    };
+    std::vector<ItemLayout> m_layout; // computed per frame
+
+    void computeLayout();
+    f32 itemWidth(const Item& item) const;
+    isize itemIndexAtX(f32 x) const;
+};
+
+} // namespace gut
+
+
 // --- gut/elements/Image.h ---
 
 
@@ -22601,6 +22851,753 @@ void Toast::dismissAll(Context* ctx) {
             [ctx](const ToastEntry& e) { return e.ctx == ctx; }),
         mgr.entries.end());
     mgr.removeOverlayIfEmpty(ctx);
+}
+
+} // namespace gut
+
+
+// === Icon implementation =====================================================
+
+#include <cmath>
+
+namespace gut {
+
+void Icon::draw(RenderContext& ctx, IconName name, Point2f pos, f32 size, Color color, f32 strokeWeight) {
+    draw(ctx, name, {pos.x, pos.y, size, size}, color, strokeWeight);
+}
+
+void Icon::draw(RenderContext& ctx, IconName name, Rectf b, Color color, f32 strokeWeight) {
+    if (name == IconName::None) return;
+
+    // Normalise into a unit square then scale
+    f32 s = std::min(b.width, b.height); // icon fits in smaller dimension
+    // Centre within bounds
+    f32 ox = b.x + (b.width - s) * 0.5f;
+    f32 oy = b.y + (b.height - s) * 0.5f;
+    f32 t = strokeWeight > 0.0f ? strokeWeight : std::max(1.0f, s * 0.08f); // auto thickness
+
+    // Helper lambdas for local coords [0..1] → pixel
+    auto px = [&](f32 u) -> f32 { return ox + u * s; };
+    auto py = [&](f32 v) -> f32 { return oy + v * s; };
+    auto pt = [&](f32 u, f32 v) -> Point2f { return {px(u), py(v)}; };
+
+    switch (name) {
+
+    // ── File / Document ─────────────────────────────────────────────────
+    case IconName::FileNew: {
+        // Page with folded corner
+        f32 fold = 0.3f;
+        ctx.drawLine(pt(0.2f,0.05f), pt(0.2f,0.95f), color, t);
+        ctx.drawLine(pt(0.2f,0.95f), pt(0.8f,0.95f), color, t);
+        ctx.drawLine(pt(0.8f,0.95f), pt(0.8f, 0.05f+fold), color, t);
+        ctx.drawLine(pt(0.8f, 0.05f+fold), pt(0.8f-fold, 0.05f), color, t);
+        ctx.drawLine(pt(0.8f-fold, 0.05f), pt(0.2f, 0.05f), color, t);
+        // Fold line
+        ctx.drawLine(pt(0.8f-fold, 0.05f), pt(0.8f-fold, 0.05f+fold), color, t*0.7f);
+        ctx.drawLine(pt(0.8f-fold, 0.05f+fold), pt(0.8f, 0.05f+fold), color, t*0.7f);
+        break;
+    }
+    case IconName::FileOpen: {
+        // Folder shape
+        ctx.drawLine(pt(0.1f,0.25f), pt(0.1f,0.85f), color, t);
+        ctx.drawLine(pt(0.1f,0.85f), pt(0.9f,0.85f), color, t);
+        ctx.drawLine(pt(0.9f,0.85f), pt(0.9f,0.35f), color, t);
+        ctx.drawLine(pt(0.9f,0.35f), pt(0.5f,0.35f), color, t);
+        ctx.drawLine(pt(0.5f,0.35f), pt(0.4f,0.25f), color, t);
+        ctx.drawLine(pt(0.4f,0.25f), pt(0.1f,0.25f), color, t);
+        break;
+    }
+    case IconName::Save: {
+        // Floppy disk
+        f32 r = 0.06f;
+        ctx.strokeRoundedRect({px(0.1f), py(0.1f), s*0.8f, s*0.8f}, s*r, color, t);
+        // Metal slider
+        ctx.fillRect({px(0.35f), py(0.1f), s*0.3f, s*0.25f}, color);
+        // Label area
+        ctx.fillRect({px(0.2f), py(0.55f), s*0.6f, s*0.02f}, color);
+        ctx.fillRect({px(0.2f), py(0.62f), s*0.6f, s*0.02f}, color);
+        ctx.fillRect({px(0.2f), py(0.69f), s*0.4f, s*0.02f}, color);
+        break;
+    }
+    case IconName::SaveAs: {
+        // Smaller floppy + pencil
+        ctx.strokeRoundedRect({px(0.05f), py(0.15f), s*0.65f, s*0.7f}, s*0.04f, color, t);
+        ctx.fillRect({px(0.25f), py(0.15f), s*0.25f, s*0.2f}, color);
+        // Pencil overlay
+        ctx.drawLine(pt(0.6f,0.7f), pt(0.9f,0.1f), color, t);
+        ctx.drawLine(pt(0.55f,0.65f), pt(0.85f,0.05f), color, t);
+        ctx.drawLine(pt(0.55f,0.65f), pt(0.6f,0.7f), color, t*0.7f);
+        break;
+    }
+
+    // ── Edit ────────────────────────────────────────────────────────────
+    case IconName::Cut: {
+        // Scissors: two small circles + crossing lines
+        f32 cr = 0.12f;
+        ctx.strokeEllipse(pt(0.3f,0.8f), s*cr, s*cr, color, t);
+        ctx.strokeEllipse(pt(0.7f,0.8f), s*cr, s*cr, color, t);
+        ctx.drawLine(pt(0.3f,0.68f), pt(0.6f,0.2f), color, t);
+        ctx.drawLine(pt(0.7f,0.68f), pt(0.4f,0.2f), color, t);
+        break;
+    }
+    case IconName::Copy: {
+        // Two overlapping pages
+        ctx.strokeRoundedRect({px(0.25f), py(0.2f), s*0.55f, s*0.65f}, s*0.04f, color, t);
+        ctx.drawLine(pt(0.2f,0.3f), pt(0.2f,0.85f), color, t);
+        ctx.drawLine(pt(0.2f,0.85f), pt(0.7f,0.85f), color, t);
+        ctx.drawLine(pt(0.2f,0.3f), pt(0.25f,0.3f), color, t);
+        ctx.drawLine(pt(0.7f,0.85f), pt(0.7f,0.82f), color, t);
+        break;
+    }
+    case IconName::Paste: {
+        // Clipboard
+        ctx.strokeRoundedRect({px(0.15f), py(0.2f), s*0.7f, s*0.7f}, s*0.04f, color, t);
+        // Clip at top
+        ctx.fillRoundedRect({px(0.35f), py(0.12f), s*0.3f, s*0.16f}, s*0.04f, color);
+        // Lines on clipboard
+        ctx.fillRect({px(0.25f), py(0.5f), s*0.5f, s*0.02f}, color);
+        ctx.fillRect({px(0.25f), py(0.6f), s*0.5f, s*0.02f}, color);
+        ctx.fillRect({px(0.25f), py(0.7f), s*0.35f, s*0.02f}, color);
+        break;
+    }
+    case IconName::Undo: {
+        // Curved arrow pointing left
+        f32 cx = 0.55f, cy = 0.5f, r = 0.3f;
+        std::vector<Point2f> arc;
+        for (int i = 0; i <= 12; ++i) {
+            f32 a = 3.14159f * 0.2f + (3.14159f * 1.3f) * static_cast<f32>(i) / 12.0f;
+            arc.push_back(pt(cx + r * std::cos(a), cy + r * std::sin(a)));
+        }
+        ctx.drawPolyline(arc, color, t, false, LineJoin::Round, LineCap::Round);
+        // Arrow head
+        auto tip = arc.front();
+        ctx.drawLine(tip, {tip.x + s*0.12f, tip.y - s*0.08f}, color, t);
+        ctx.drawLine(tip, {tip.x + s*0.02f, tip.y + s*0.12f}, color, t);
+        break;
+    }
+    case IconName::Redo: {
+        // Curved arrow pointing right
+        f32 cx = 0.45f, cy = 0.5f, r = 0.3f;
+        std::vector<Point2f> arc;
+        for (int i = 0; i <= 12; ++i) {
+            f32 a = 3.14159f * 1.8f - (3.14159f * 1.3f) * static_cast<f32>(i) / 12.0f;
+            arc.push_back(pt(cx + r * std::cos(a), cy + r * std::sin(a)));
+        }
+        ctx.drawPolyline(arc, color, t, false, LineJoin::Round, LineCap::Round);
+        auto tip = arc.front();
+        ctx.drawLine(tip, {tip.x - s*0.12f, tip.y - s*0.08f}, color, t);
+        ctx.drawLine(tip, {tip.x - s*0.02f, tip.y + s*0.12f}, color, t);
+        break;
+    }
+    case IconName::Delete: {
+        // Trash can
+        ctx.drawLine(pt(0.3f,0.25f), pt(0.7f,0.25f), color, t); // lid
+        ctx.drawLine(pt(0.25f,0.25f), pt(0.75f,0.25f), color, t*1.2f); // rim
+        ctx.drawLine(pt(0.32f,0.25f), pt(0.35f,0.85f), color, t);
+        ctx.drawLine(pt(0.68f,0.25f), pt(0.65f,0.85f), color, t);
+        ctx.drawLine(pt(0.35f,0.85f), pt(0.65f,0.85f), color, t);
+        // Handle
+        ctx.drawLine(pt(0.42f,0.25f), pt(0.42f,0.15f), color, t*0.8f);
+        ctx.drawLine(pt(0.42f,0.15f), pt(0.58f,0.15f), color, t*0.8f);
+        ctx.drawLine(pt(0.58f,0.15f), pt(0.58f,0.25f), color, t*0.8f);
+        // Interior lines
+        ctx.drawLine(pt(0.5f,0.35f), pt(0.5f,0.75f), color, t*0.7f);
+        break;
+    }
+
+    // ── Text formatting ────────────────────────────────────────────────
+    case IconName::Bold: {
+        // Bold "B"
+        f32 tw = t * 1.5f;
+        ctx.drawLine(pt(0.3f,0.15f), pt(0.3f,0.85f), color, tw);
+        ctx.drawLine(pt(0.3f,0.15f), pt(0.6f,0.15f), color, tw);
+        ctx.drawLine(pt(0.3f,0.5f),  pt(0.65f,0.5f), color, tw);
+        ctx.drawLine(pt(0.3f,0.85f), pt(0.65f,0.85f), color, tw);
+        // Bumps
+        std::vector<Point2f> top;
+        for (int i = 0; i <= 6; ++i) {
+            f32 a = -1.5708f + 3.14159f * static_cast<f32>(i) / 6.0f;
+            top.push_back(pt(0.6f + 0.12f*std::cos(a), 0.325f + 0.175f*std::sin(a)));
+        }
+        ctx.drawPolyline(top, color, tw, false, LineJoin::Round, LineCap::Round);
+        std::vector<Point2f> bot;
+        for (int i = 0; i <= 6; ++i) {
+            f32 a = -1.5708f + 3.14159f * static_cast<f32>(i) / 6.0f;
+            bot.push_back(pt(0.65f + 0.13f*std::cos(a), 0.675f + 0.175f*std::sin(a)));
+        }
+        ctx.drawPolyline(bot, color, tw, false, LineJoin::Round, LineCap::Round);
+        break;
+    }
+    case IconName::Italic: {
+        // Slanted "I"
+        ctx.drawLine(pt(0.35f,0.15f), pt(0.65f,0.15f), color, t);
+        ctx.drawLine(pt(0.3f,0.85f),  pt(0.6f,0.85f), color, t);
+        ctx.drawLine(pt(0.55f,0.15f), pt(0.4f,0.85f), color, t*1.2f);
+        break;
+    }
+    case IconName::Underline: {
+        // "U" shape + underline
+        std::vector<Point2f> uShape;
+        for (int i = 0; i <= 10; ++i) {
+            f32 a = 3.14159f * static_cast<f32>(i) / 10.0f;
+            uShape.push_back(pt(0.5f + 0.22f*std::cos(a + 3.14159f), 0.6f + 0.2f*std::sin(a + 3.14159f)));
+        }
+        ctx.drawPolyline(uShape, color, t*1.2f, false, LineJoin::Round, LineCap::Round);
+        ctx.drawLine(pt(0.28f,0.2f), pt(0.28f,0.6f), color, t*1.2f);
+        ctx.drawLine(pt(0.72f,0.2f), pt(0.72f,0.6f), color, t*1.2f);
+        ctx.drawLine(pt(0.2f,0.9f), pt(0.8f,0.9f), color, t);
+        break;
+    }
+    case IconName::Strikethrough: {
+        // "S" with horizontal strike
+        ctx.drawLine(pt(0.15f,0.5f), pt(0.85f,0.5f), color, t);
+        std::vector<Point2f> sCurve;
+        for (int i = 0; i <= 8; ++i) {
+            f32 v = static_cast<f32>(i) / 8.0f;
+            f32 u = 0.5f + 0.2f * std::sin(v * 3.14159f * 2.0f - 1.5708f);
+            sCurve.push_back(pt(u, 0.15f + v * 0.7f));
+        }
+        ctx.drawPolyline(sCurve, color, t*1.1f, false, LineJoin::Round, LineCap::Round);
+        break;
+    }
+    case IconName::AlignLeft: {
+        ctx.fillRect({px(0.15f), py(0.2f), s*0.7f, s*0.04f}, color);
+        ctx.fillRect({px(0.15f), py(0.38f), s*0.5f, s*0.04f}, color);
+        ctx.fillRect({px(0.15f), py(0.56f), s*0.65f, s*0.04f}, color);
+        ctx.fillRect({px(0.15f), py(0.74f), s*0.45f, s*0.04f}, color);
+        break;
+    }
+    case IconName::AlignCenter: {
+        ctx.fillRect({px(0.15f), py(0.2f), s*0.7f, s*0.04f}, color);
+        ctx.fillRect({px(0.25f), py(0.38f), s*0.5f, s*0.04f}, color);
+        ctx.fillRect({px(0.18f), py(0.56f), s*0.65f, s*0.04f}, color);
+        ctx.fillRect({px(0.28f), py(0.74f), s*0.45f, s*0.04f}, color);
+        break;
+    }
+    case IconName::AlignRight: {
+        ctx.fillRect({px(0.15f), py(0.2f), s*0.7f, s*0.04f}, color);
+        ctx.fillRect({px(0.35f), py(0.38f), s*0.5f, s*0.04f}, color);
+        ctx.fillRect({px(0.2f), py(0.56f), s*0.65f, s*0.04f}, color);
+        ctx.fillRect({px(0.4f), py(0.74f), s*0.45f, s*0.04f}, color);
+        break;
+    }
+
+    // ── Navigation ──────────────────────────────────────────────────────
+    case IconName::ArrowUp: {
+        ctx.drawLine(pt(0.5f,0.2f), pt(0.5f,0.8f), color, t);
+        ctx.drawLine(pt(0.5f,0.2f), pt(0.25f,0.45f), color, t);
+        ctx.drawLine(pt(0.5f,0.2f), pt(0.75f,0.45f), color, t);
+        break;
+    }
+    case IconName::ArrowDown: {
+        ctx.drawLine(pt(0.5f,0.8f), pt(0.5f,0.2f), color, t);
+        ctx.drawLine(pt(0.5f,0.8f), pt(0.25f,0.55f), color, t);
+        ctx.drawLine(pt(0.5f,0.8f), pt(0.75f,0.55f), color, t);
+        break;
+    }
+    case IconName::ArrowLeft: {
+        ctx.drawLine(pt(0.2f,0.5f), pt(0.8f,0.5f), color, t);
+        ctx.drawLine(pt(0.2f,0.5f), pt(0.45f,0.25f), color, t);
+        ctx.drawLine(pt(0.2f,0.5f), pt(0.45f,0.75f), color, t);
+        break;
+    }
+    case IconName::ArrowRight: {
+        ctx.drawLine(pt(0.8f,0.5f), pt(0.2f,0.5f), color, t);
+        ctx.drawLine(pt(0.8f,0.5f), pt(0.55f,0.25f), color, t);
+        ctx.drawLine(pt(0.8f,0.5f), pt(0.55f,0.75f), color, t);
+        break;
+    }
+    case IconName::Home: {
+        // House: roof + body
+        ctx.drawLine(pt(0.5f,0.1f), pt(0.1f,0.5f), color, t);
+        ctx.drawLine(pt(0.5f,0.1f), pt(0.9f,0.5f), color, t);
+        ctx.drawLine(pt(0.2f,0.45f), pt(0.2f,0.9f), color, t);
+        ctx.drawLine(pt(0.8f,0.45f), pt(0.8f,0.9f), color, t);
+        ctx.drawLine(pt(0.2f,0.9f), pt(0.8f,0.9f), color, t);
+        // Door
+        ctx.drawLine(pt(0.42f,0.9f), pt(0.42f,0.6f), color, t*0.8f);
+        ctx.drawLine(pt(0.58f,0.9f), pt(0.58f,0.6f), color, t*0.8f);
+        ctx.drawLine(pt(0.42f,0.6f), pt(0.58f,0.6f), color, t*0.8f);
+        break;
+    }
+    case IconName::Search: {
+        // Magnifying glass
+        f32 cr = 0.25f;
+        ctx.strokeEllipse(pt(0.42f,0.42f), s*cr, s*cr, color, t);
+        ctx.drawLine(pt(0.6f,0.6f), pt(0.85f,0.85f), color, t*1.4f);
+        break;
+    }
+    case IconName::Refresh: {
+        // Circular arrow
+        std::vector<Point2f> arc;
+        for (int i = 0; i <= 16; ++i) {
+            f32 a = -0.4f + 5.2f * static_cast<f32>(i) / 16.0f;
+            arc.push_back(pt(0.5f + 0.3f*std::cos(a), 0.5f + 0.3f*std::sin(a)));
+        }
+        ctx.drawPolyline(arc, color, t, false, LineJoin::Round, LineCap::Round);
+        auto tip = arc.back();
+        ctx.drawLine(tip, {tip.x + s*0.1f, tip.y - s*0.07f}, color, t);
+        ctx.drawLine(tip, {tip.x - s*0.02f, tip.y - s*0.12f}, color, t);
+        break;
+    }
+
+    // ── Actions ─────────────────────────────────────────────────────────
+    case IconName::Plus: {
+        ctx.drawLine(pt(0.5f,0.15f), pt(0.5f,0.85f), color, t*1.2f);
+        ctx.drawLine(pt(0.15f,0.5f), pt(0.85f,0.5f), color, t*1.2f);
+        break;
+    }
+    case IconName::Minus: {
+        ctx.drawLine(pt(0.15f,0.5f), pt(0.85f,0.5f), color, t*1.2f);
+        break;
+    }
+    case IconName::Close: {
+        ctx.drawLine(pt(0.2f,0.2f), pt(0.8f,0.8f), color, t*1.2f);
+        ctx.drawLine(pt(0.8f,0.2f), pt(0.2f,0.8f), color, t*1.2f);
+        break;
+    }
+    case IconName::Check: {
+        ctx.drawLine(pt(0.15f,0.5f), pt(0.4f,0.78f), color, t*1.3f);
+        ctx.drawLine(pt(0.4f,0.78f), pt(0.85f,0.22f), color, t*1.3f);
+        break;
+    }
+    case IconName::Settings: {
+        // Gear: circle + 6 notches
+        f32 cr = 0.18f, nr = 0.32f;
+        ctx.strokeEllipse(pt(0.5f,0.5f), s*cr, s*cr, color, t);
+        for (int i = 0; i < 6; ++i) {
+            f32 a = static_cast<f32>(i) * 3.14159f / 3.0f;
+            f32 c1 = std::cos(a), s1 = std::sin(a);
+            ctx.drawLine(pt(0.5f + cr*c1, 0.5f + cr*s1),
+                         pt(0.5f + nr*c1, 0.5f + nr*s1), color, t*1.5f);
+        }
+        break;
+    }
+    case IconName::Menu: {
+        // Hamburger — 3 lines
+        ctx.fillRect({px(0.15f), py(0.22f), s*0.7f, s*0.06f}, color);
+        ctx.fillRect({px(0.15f), py(0.47f), s*0.7f, s*0.06f}, color);
+        ctx.fillRect({px(0.15f), py(0.72f), s*0.7f, s*0.06f}, color);
+        break;
+    }
+    case IconName::MoreHorizontal: {
+        f32 dr = s * 0.05f;
+        ctx.fillEllipse(pt(0.25f,0.5f), dr, dr, color);
+        ctx.fillEllipse(pt(0.5f,0.5f), dr, dr, color);
+        ctx.fillEllipse(pt(0.75f,0.5f), dr, dr, color);
+        break;
+    }
+    case IconName::MoreVertical: {
+        f32 dr = s * 0.05f;
+        ctx.fillEllipse(pt(0.5f,0.25f), dr, dr, color);
+        ctx.fillEllipse(pt(0.5f,0.5f), dr, dr, color);
+        ctx.fillEllipse(pt(0.5f,0.75f), dr, dr, color);
+        break;
+    }
+
+    // ── Media ───────────────────────────────────────────────────────────
+    case IconName::Play: {
+        ctx.fillTriangle(pt(0.25f,0.15f), pt(0.25f,0.85f), pt(0.82f,0.5f), color);
+        break;
+    }
+    case IconName::Pause: {
+        ctx.fillRect({px(0.2f), py(0.15f), s*0.2f, s*0.7f}, color);
+        ctx.fillRect({px(0.6f), py(0.15f), s*0.2f, s*0.7f}, color);
+        break;
+    }
+    case IconName::Stop: {
+        ctx.fillRect({px(0.2f), py(0.2f), s*0.6f, s*0.6f}, color);
+        break;
+    }
+    case IconName::SkipForward: {
+        ctx.fillTriangle(pt(0.15f,0.15f), pt(0.15f,0.85f), pt(0.6f,0.5f), color);
+        ctx.fillRect({px(0.65f), py(0.15f), s*0.08f, s*0.7f}, color);
+        break;
+    }
+    case IconName::SkipBack: {
+        ctx.fillTriangle(pt(0.85f,0.15f), pt(0.85f,0.85f), pt(0.4f,0.5f), color);
+        ctx.fillRect({px(0.27f), py(0.15f), s*0.08f, s*0.7f}, color);
+        break;
+    }
+
+    // ── Misc ────────────────────────────────────────────────────────────
+    case IconName::Info: {
+        ctx.strokeEllipse(pt(0.5f,0.5f), s*0.35f, s*0.35f, color, t);
+        ctx.fillEllipse(pt(0.5f,0.3f), s*0.04f, s*0.04f, color);
+        ctx.drawLine(pt(0.5f,0.42f), pt(0.5f,0.72f), color, t*1.2f);
+        break;
+    }
+    case IconName::Warning: {
+        ctx.drawLine(pt(0.5f,0.1f), pt(0.1f,0.85f), color, t);
+        ctx.drawLine(pt(0.1f,0.85f), pt(0.9f,0.85f), color, t);
+        ctx.drawLine(pt(0.9f,0.85f), pt(0.5f,0.1f), color, t);
+        ctx.fillEllipse(pt(0.5f,0.72f), s*0.035f, s*0.035f, color);
+        ctx.drawLine(pt(0.5f,0.38f), pt(0.5f,0.62f), color, t*1.1f);
+        break;
+    }
+    case IconName::Error: {
+        ctx.strokeEllipse(pt(0.5f,0.5f), s*0.35f, s*0.35f, color, t);
+        ctx.drawLine(pt(0.32f,0.32f), pt(0.68f,0.68f), color, t);
+        ctx.drawLine(pt(0.68f,0.32f), pt(0.32f,0.68f), color, t);
+        break;
+    }
+    case IconName::Star: {
+        std::vector<Point2f> pts;
+        for (int i = 0; i < 10; ++i) {
+            f32 a = -1.5708f + 3.14159f * 2.0f * static_cast<f32>(i) / 10.0f;
+            f32 r = (i % 2 == 0) ? 0.4f : 0.18f;
+            pts.push_back(pt(0.5f + r * std::cos(a), 0.5f + r * std::sin(a)));
+        }
+        ctx.fillPolygon(pts, color);
+        break;
+    }
+    case IconName::Heart: {
+        // Approximate heart with polyline
+        std::vector<Point2f> hp;
+        for (int i = 0; i <= 20; ++i) {
+            f32 v = static_cast<f32>(i) / 20.0f * 3.14159f * 2.0f;
+            f32 hx = 0.5f + 0.35f * (16.0f * std::pow(std::sin(v), 3.0f)) / 16.0f;
+            f32 hy = 0.45f - 0.32f * (13.0f * std::cos(v) - 5.0f * std::cos(2*v) - 2.0f * std::cos(3*v) - std::cos(4*v)) / 16.0f;
+            hp.push_back(pt(hx, hy));
+        }
+        ctx.fillPolygon(hp, color);
+        break;
+    }
+    case IconName::Eye: {
+        // Eye shape: top arc + bottom arc + circle iris
+        std::vector<Point2f> eyeTop, eyeBot;
+        for (int i = 0; i <= 12; ++i) {
+            f32 u = static_cast<f32>(i) / 12.0f;
+            f32 ex = 0.1f + 0.8f * u;
+            f32 ey = 0.5f - 0.22f * std::sin(u * 3.14159f);
+            eyeTop.push_back(pt(ex, ey));
+        }
+        for (int i = 0; i <= 12; ++i) {
+            f32 u = static_cast<f32>(i) / 12.0f;
+            f32 ex = 0.1f + 0.8f * u;
+            f32 ey = 0.5f + 0.22f * std::sin(u * 3.14159f);
+            eyeBot.push_back(pt(ex, ey));
+        }
+        ctx.drawPolyline(eyeTop, color, t, false, LineJoin::Round, LineCap::Round);
+        ctx.drawPolyline(eyeBot, color, t, false, LineJoin::Round, LineCap::Round);
+        ctx.fillEllipse(pt(0.5f,0.5f), s*0.1f, s*0.1f, color);
+        break;
+    }
+    case IconName::EyeOff: {
+        // Eye shape + diagonal line
+        std::vector<Point2f> eyeTop, eyeBot;
+        for (int i = 0; i <= 12; ++i) {
+            f32 u = static_cast<f32>(i) / 12.0f;
+            f32 ex = 0.1f + 0.8f * u;
+            f32 ey = 0.5f - 0.22f * std::sin(u * 3.14159f);
+            eyeTop.push_back(pt(ex, ey));
+        }
+        for (int i = 0; i <= 12; ++i) {
+            f32 u = static_cast<f32>(i) / 12.0f;
+            f32 ex = 0.1f + 0.8f * u;
+            f32 ey = 0.5f + 0.22f * std::sin(u * 3.14159f);
+            eyeBot.push_back(pt(ex, ey));
+        }
+        ctx.drawPolyline(eyeTop, color, t, false, LineJoin::Round, LineCap::Round);
+        ctx.drawPolyline(eyeBot, color, t, false, LineJoin::Round, LineCap::Round);
+        ctx.fillEllipse(pt(0.5f, 0.5f), s * 0.1f, s * 0.1f, color);
+        ctx.drawLine(pt(0.15f, 0.15f), pt(0.85f, 0.85f), color, t * 1.3f);
+        break;
+    }
+    case IconName::Lock: {
+        // Padlock body + shackle
+        ctx.fillRoundedRect({px(0.2f), py(0.45f), s*0.6f, s*0.45f}, s*0.06f, color);
+        std::vector<Point2f> shackle;
+        for (int i = 0; i <= 10; ++i) {
+            f32 a = 3.14159f + 3.14159f * static_cast<f32>(i) / 10.0f;
+            shackle.push_back(pt(0.5f + 0.17f*std::cos(a), 0.45f + 0.2f*std::sin(a)));
+        }
+        ctx.drawPolyline(shackle, color, t*1.3f, false, LineJoin::Round, LineCap::Round);
+        break;
+    }
+    case IconName::Unlock: {
+        // Open padlock — shackle shifted up-right
+        ctx.fillRoundedRect({px(0.2f), py(0.45f), s*0.6f, s*0.45f}, s*0.06f, color);
+        ctx.drawLine(pt(0.33f,0.45f), pt(0.33f,0.32f), color, t*1.3f);
+        std::vector<Point2f> shackle;
+        for (int i = 0; i <= 8; ++i) {
+            f32 a = 3.14159f + 3.14159f * static_cast<f32>(i) / 10.0f;
+            shackle.push_back(pt(0.5f + 0.17f*std::cos(a), 0.32f + 0.17f*std::sin(a)));
+        }
+        ctx.drawPolyline(shackle, color, t*1.3f, false, LineJoin::Round, LineCap::Round);
+        break;
+    }
+    case IconName::User: {
+        // Head circle + body arc
+        ctx.strokeEllipse(pt(0.5f,0.3f), s*0.15f, s*0.15f, color, t);
+        std::vector<Point2f> body;
+        for (int i = 0; i <= 10; ++i) {
+            f32 a = 3.14159f + 3.14159f * static_cast<f32>(i) / 10.0f;
+            body.push_back(pt(0.5f + 0.3f*std::cos(a), 0.9f + 0.25f*std::sin(a)));
+        }
+        ctx.drawPolyline(body, color, t, false, LineJoin::Round, LineCap::Round);
+        break;
+    }
+    case IconName::Download: {
+        // Arrow down into tray
+        ctx.drawLine(pt(0.5f,0.12f), pt(0.5f,0.6f), color, t);
+        ctx.drawLine(pt(0.5f,0.6f), pt(0.3f,0.42f), color, t);
+        ctx.drawLine(pt(0.5f,0.6f), pt(0.7f,0.42f), color, t);
+        ctx.drawLine(pt(0.15f,0.75f), pt(0.15f,0.88f), color, t);
+        ctx.drawLine(pt(0.15f,0.88f), pt(0.85f,0.88f), color, t);
+        ctx.drawLine(pt(0.85f,0.88f), pt(0.85f,0.75f), color, t);
+        break;
+    }
+    case IconName::Upload: {
+        // Arrow up from tray
+        ctx.drawLine(pt(0.5f,0.6f), pt(0.5f,0.12f), color, t);
+        ctx.drawLine(pt(0.5f,0.12f), pt(0.3f,0.3f), color, t);
+        ctx.drawLine(pt(0.5f,0.12f), pt(0.7f,0.3f), color, t);
+        ctx.drawLine(pt(0.15f,0.75f), pt(0.15f,0.88f), color, t);
+        ctx.drawLine(pt(0.15f,0.88f), pt(0.85f,0.88f), color, t);
+        ctx.drawLine(pt(0.85f,0.88f), pt(0.85f,0.75f), color, t);
+        break;
+    }
+
+    default:
+        break;
+    }
+}
+
+// ── IconElement ─────────────────────────────────────────────────────────
+
+IconElement::IconElement(IconName name) {
+    seticon(name);
+}
+
+Size2f IconElement::measureOverride(Size2f /*availableSize*/) {
+    return {size(), size()};
+}
+
+void IconElement::onRender(RenderContext& ctx) {
+    Icon::draw(ctx, icon(), {0, 0, bounds().width, bounds().height}, color(), strokeWeight());
+}
+
+} // namespace gut
+
+
+// === Toolbar implementation ==================================================
+
+namespace gut {
+
+Toolbar::Toolbar() {
+    setfocusable(true);
+}
+
+void Toolbar::addButton(IconName icon, String label, std::function<void()> action, String tooltip) {
+    m_items.push_back({ToolbarItemType::Button, icon, std::move(label), std::move(tooltip),
+                        std::move(action), nullptr, false, true});
+    invalidateLayout();
+    invalidateRender();
+}
+
+void Toolbar::addButton(IconName icon, std::function<void()> action, String tooltip) {
+    addButton(icon, "", std::move(action), std::move(tooltip));
+}
+
+void Toolbar::addButton(String label, std::function<void()> action, String tooltip) {
+    addButton(IconName::None, std::move(label), std::move(action), std::move(tooltip));
+}
+
+void Toolbar::addToggle(IconName icon, String label, bool initialState,
+                         std::function<void(bool)> onToggled, String tooltip) {
+    m_items.push_back({ToolbarItemType::Toggle, icon, std::move(label), std::move(tooltip),
+                        nullptr, std::move(onToggled), initialState, true});
+    invalidateLayout();
+    invalidateRender();
+}
+
+void Toolbar::addSeparator() {
+    m_items.push_back({ToolbarItemType::Separator, IconName::None, "", "", nullptr, nullptr, false, true});
+    invalidateLayout();
+    invalidateRender();
+}
+
+void Toolbar::setToggled(usize index, bool value) {
+    if (index < m_items.size() && m_items[index].type == ToolbarItemType::Toggle) {
+        m_items[index].toggled = value;
+        invalidateRender();
+    }
+}
+
+void Toolbar::setItemEnabled(usize index, bool enabled) {
+    if (index < m_items.size()) {
+        m_items[index].enabled = enabled;
+        invalidateRender();
+    }
+}
+
+f32 Toolbar::itemWidth(const Item& item) const {
+    if (item.type == ToolbarItemType::Separator) return separatorWidth() + spacing() * 2.0f;
+
+    f32 w = itemPadding() * 2.0f;
+    if (item.icon != IconName::None) w += iconSize();
+    if (!item.label.empty()) {
+        f32 labelW = static_cast<f32>(item.label.size()) * fontSize() * 0.65f; // approximate
+        if (item.icon != IconName::None) w += spacing(); // gap between icon and label
+        w += labelW;
+    }
+    // Minimum width = height (square for icon-only buttons)
+    if (item.icon != IconName::None && item.label.empty()) {
+        w = std::max(w, itemHeight());
+    }
+    return w;
+}
+
+void Toolbar::computeLayout() {
+    m_layout.clear();
+    f32 x = spacing();
+    for (usize i = 0; i < m_items.size(); ++i) {
+        f32 w = itemWidth(m_items[i]);
+        m_layout.push_back({{x, 0, w, itemHeight()}, i});
+        x += w + spacing();
+    }
+}
+
+isize Toolbar::itemIndexAtX(f32 x) const {
+    for (auto& lay : m_layout) {
+        if (x >= lay.rect.x && x < lay.rect.x + lay.rect.width) {
+            auto& item = m_items[lay.itemIndex];
+            if (item.type == ToolbarItemType::Separator) return -1;
+            return static_cast<isize>(lay.itemIndex);
+        }
+    }
+    return -1;
+}
+
+Size2f Toolbar::measureOverride(Size2f availableSize) {
+    computeLayout();
+    f32 totalW = 0;
+    if (!m_layout.empty()) {
+        auto& last = m_layout.back();
+        totalW = last.rect.x + last.rect.width + spacing();
+    }
+    return {std::max(totalW, availableSize.width), itemHeight()};
+}
+
+void Toolbar::onRender(RenderContext& ctx) {
+    computeLayout();
+
+    // Background
+    ctx.fillRect({0, 0, bounds().width, bounds().height}, toolbarBackground());
+    // Bottom border
+    ctx.fillRect({0, bounds().height - 1, bounds().width, 1}, borderColor());
+
+    Font* font = context() ? context()->defaultFont() : nullptr;
+    Ref<FontFace> face;
+    if (font) face = font->getFace(fontSize());
+
+    for (auto& lay : m_layout) {
+        const auto& item = m_items[lay.itemIndex];
+        Rectf r = lay.rect;
+        isize idx = static_cast<isize>(lay.itemIndex);
+
+        if (item.type == ToolbarItemType::Separator) {
+            f32 sx = r.x + r.width * 0.5f;
+            f32 topPad = r.height * 0.2f;
+            ctx.drawLine({sx, topPad}, {sx, r.height - topPad}, separatorColor(), separatorWidth());
+            continue;
+        }
+
+        // Background highlight
+        bool hovered = (idx == m_hoveredItem && item.enabled);
+        bool pressed = (idx == m_pressedItem && item.enabled);
+        bool toggled = (item.type == ToolbarItemType::Toggle && item.toggled);
+
+        if (pressed) {
+            ctx.fillRoundedRect(r, 4.0f, itemPressedBackground());
+        } else if (toggled) {
+            ctx.fillRoundedRect(r, 4.0f, itemToggledBackground());
+        } else if (hovered) {
+            ctx.fillRoundedRect(r, 4.0f, itemHoverBackground());
+        }
+
+        Color fg = item.enabled ? itemForeground() : itemDisabledForeground();
+
+        // Position icon and label inside item rect
+        f32 contentX = r.x + itemPadding();
+
+        if (item.icon != IconName::None) {
+            f32 icoS = iconSize();
+            f32 icoY = r.y + (r.height - icoS) * 0.5f;
+            // If no label, centre icon
+            if (item.label.empty()) {
+                f32 icoX = r.x + (r.width - icoS) * 0.5f;
+                Icon::draw(ctx, item.icon, {icoX, icoY, icoS, icoS}, fg);
+            } else {
+                Icon::draw(ctx, item.icon, {contentX, icoY, icoS, icoS}, fg);
+                contentX += icoS + spacing();
+            }
+        }
+
+        if (!item.label.empty() && face) {
+            f32 ty = r.y + (r.height - face->lineHeight()) * 0.5f + face->ascender();
+            ctx.drawText(face.get(), item.label, {contentX, ty}, fg);
+        }
+    }
+}
+
+bool Toolbar::onMouseEvent(const MouseEvent& event) {
+    switch (event.type) {
+        case MouseEventType::Move: {
+            isize idx = itemIndexAtX(event.position.x);
+            if (idx != m_hoveredItem) {
+                m_hoveredItem = idx;
+                invalidateRender();
+            }
+            return false;
+        }
+        case MouseEventType::ButtonDown: {
+            if (event.button == MouseButton::Left) {
+                isize idx = itemIndexAtX(event.position.x);
+                if (idx >= 0 && m_items[static_cast<usize>(idx)].enabled) {
+                    m_pressedItem = idx;
+                    invalidateRender();
+                }
+                return true;
+            }
+            return false;
+        }
+        case MouseEventType::ButtonUp: {
+            if (event.button == MouseButton::Left && m_pressedItem >= 0) {
+                isize idx = itemIndexAtX(event.position.x);
+                if (idx == m_pressedItem) {
+                    auto& item = m_items[static_cast<usize>(idx)];
+                    if (item.enabled) {
+                        if (item.type == ToolbarItemType::Toggle) {
+                            item.toggled = !item.toggled;
+                            if (item.onToggled) item.onToggled(item.toggled);
+                        } else if (item.onClick) {
+                            item.onClick();
+                        }
+                    }
+                }
+                m_pressedItem = -1;
+                invalidateRender();
+                return true;
+            }
+            return false;
+        }
+        default:
+            return false;
+    }
+}
+
+void Toolbar::onMouseEnter() {
+    Element::onMouseEnter();
+}
+
+void Toolbar::onMouseLeave() {
+    if (m_hoveredItem != -1) {
+        m_hoveredItem = -1;
+        invalidateRender();
+    }
+    Element::onMouseLeave();
 }
 
 } // namespace gut
