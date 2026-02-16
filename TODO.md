@@ -108,10 +108,10 @@
 - [x] Repeat / loop — once, forever, times(n)
 - [x] Storyboard — multiple grouped animations
 - [x] Keyframe animation
-- [ ] Implicit transitions — auto-animate property changes
-- [ ] Spring / physics-based animation
-- [ ] Path animation — animate along a curve
-- [ ] Layout animation — animate child add/remove/reorder
+- [x] Implicit transitions — TransitionBinding<T>, Element::addTransition() API
+- [x] Spring / physics-based animation — SpringAnimation<T> with retarget, mass/stiffness/damping
+- [x] Path animation — PathAnimation with arc-length parameterized cubic bezier paths
+- [x] Layout animation — LayoutTransitionConfig on Panel, animated entry/exit/move
 
 ## System
 

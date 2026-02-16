@@ -2323,11 +2323,15 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
     using namespace gut;
     auto c = [](gut::u8 r, gut::u8 g, gut::u8 b, gut::u8 a = 255) { return cc(r, g, b, a); };
 
-    auto scroll = makeRef<ScrollViewer>();
-    auto page = makeRef<WrapPanel>(Orientation::Horizontal);
-    page->setmargin(Thickness{24, 24, 24, 24});
-    page->setitemSpacing(24.0f);
-    page->setlineSpacing(24.0f);
+    auto outer = makeRef<StackPanel>(Orientation::Vertical);
+    outer->setmargin(Thickness{24, 24, 24, 24});
+    outer->setspacing(24.0f);
+
+    auto row1 = makeRef<StackPanel>(Orientation::Horizontal);
+    row1->setspacing(24.0f);
+
+    auto row2 = makeRef<StackPanel>(Orientation::Horizontal);
+    row2->setspacing(24.0f);
 
     // Cast bar card
     {
@@ -2361,7 +2365,7 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
         outAnims.push_back(anim);
 
         card->addChild(inner);
-        page->addChild(card);
+        row1->addChild(card);
     }
 
     // Pulse & Glow card
@@ -2421,7 +2425,7 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
         }
 
         card->addChild(inner);
-        page->addChild(card);
+        row1->addChild(card);
     }
 
     // Fade & Breathe card
@@ -2514,7 +2518,7 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
         }
 
         card->addChild(inner);
-        page->addChild(card);
+        row1->addChild(card);
     }
 
     // Implicit Transitions card
@@ -2544,7 +2548,7 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
         inner->addChild(colorPanel);
         inner->addChild(btn);
         card->addChild(inner);
-        page->addChild(card);
+        row2->addChild(card);
     }
 
     // Spring Physics card
@@ -2574,21 +2578,17 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
         spring->setMass(1.0f);
         spring->setTargetValue(0.0f);
 
-        auto springRaw = spring.get();
         auto btn = makeRef<Button>("Bounce!");
         btn->setmargin(Thickness{0, 8, 0, 0});
-        btn->setOnClick([springRaw]() {
+        btn->setOnClick([spring]() {
             f32 target = static_cast<f32>(std::rand() % 200);
-            springRaw->retarget(target);
+            spring->retarget(target);
         });
 
         inner->addChild(canvas);
         inner->addChild(btn);
         card->addChild(inner);
-        page->addChild(card);
-
-        // Keep spring alive
-        outAnims.push_back(makeRef<FloatAnimation>()); // placeholder
+        row2->addChild(card);
     }
 
     // Path Animation card
@@ -2623,9 +2623,12 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
         pathAnim->setRepeatBehavior(RepeatBehavior::forever());
         pathAnim->begin();
 
+        // Keep pathAnim alive by capturing in card's unused onClick
+        card->setOnClick([pathAnim]() {});
+
         inner->addChild(canvas);
         card->addChild(inner);
-        page->addChild(card);
+        row2->addChild(card);
     }
 
     // Layout Animation card
@@ -2682,11 +2685,12 @@ inline gut::Ref<gut::Element> buildAnimationsTab(std::vector<gut::Ref<gut::Float
         inner->addChild(btnRow);
         inner->addChild(itemList);
         card->addChild(inner);
-        page->addChild(card);
+        row2->addChild(card);
     }
 
-    scroll->addChild(page);
-    return scroll;
+    outer->addChild(row1);
+    outer->addChild(row2);
+    return outer;
 }
 
 // =========================================================================
