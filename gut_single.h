@@ -305,7 +305,7 @@ struct Color {
     
     constexpr Color withAlpha(f32 alpha) const { return {r, g, b, alpha}; }
     
-    constexpr Color operator*(f32 scalar) const { return {r * scalar, g * scalar, b * scalar, a}; }
+    constexpr Color operator*(f32 scalar) const { return {r * scalar, g * scalar, b * scalar, a * scalar}; }
     constexpr Color operator+(const Color& other) const { return {r + other.r, g + other.g, b + other.b, a + other.a}; }
     constexpr Color operator-(const Color& other) const { return {r - other.r, g - other.g, b - other.b, a - other.a}; }
     
@@ -3337,6 +3337,93 @@ private:
     bool m_updating = false;
     std::vector<Animation*> m_pendingRemoveAnimations;
     std::vector<Storyboard*> m_pendingRemoveStoryboards;
+};
+
+} // namespace gut
+
+
+// --- gut/animation/Transition.h ---
+
+
+#include <functional>
+#include <unordered_map>
+#include <string>
+#include <memory>
+
+namespace gut {
+
+class Element;
+
+/**
+ * @brief Describes how a property should animate when its value changes.
+ *
+ * Similar to CSS transitions: specify duration, easing, and optional delay.
+ * When a property with a registered transition changes, the old value smoothly
+ * animates to the new value instead of snapping instantly.
+ */
+struct Transition {
+    f32 durationMs  = 300.0f;       ///< Animation duration in milliseconds
+    f32 delayMs     = 0.0f;         ///< Delay before transition starts
+    EasingFunction easing;           ///< Easing function (defaults to easeInOutQuad)
+
+    Transition() : easing(easing::easeInOutQuad) {}
+    Transition(f32 dur, EasingFunction ease = easing::easeInOutQuad, f32 delay = 0.0f)
+        : durationMs(dur), delayMs(delay), easing(std::move(ease)) {}
+};
+
+/**
+ * @brief Internal: manages active transition animations for an element.
+ *
+ * Holds the mapping from property name → Transition descriptor and manages
+ * the running FloatAnimation / ColorAnimation instances, handling
+ * interruption (re-targeting) when a value changes mid-transition.
+ */
+class GUT_API TransitionManager {
+public:
+    TransitionManager() = default;
+    ~TransitionManager();
+
+    // -- Configuration --------------------------------------------------------
+
+    /// Register a transition for a float property.
+    void addFloat(const std::string& name, Property<f32>& prop, const Transition& t);
+
+    /// Register a transition for a Color property.
+    void addColor(const std::string& name, Property<Color>& prop, const Transition& t);
+
+    /// Remove a transition (restores normal instant behaviour).
+    void remove(const std::string& name);
+
+    /// Remove all transitions.
+    void clear();
+
+    /// Check if any transitions are currently playing.
+    bool hasActiveTransitions() const;
+
+private:
+    // One entry per registered property
+    struct FloatEntry {
+        Transition desc;
+        Property<f32>* prop = nullptr;
+        Ref<FloatAnimation> anim;    // currently running, or null
+        SignalBase* signal = nullptr;
+        Connection conn;             // change-signal connection
+        void disconnect() { if (signal && conn.isValid()) { signal->disconnect(conn); conn = Connection(); } }
+    };
+    struct ColorEntry {
+        Transition desc;
+        Property<Color>* prop = nullptr;
+        Ref<ColorAnimation> anim;
+        SignalBase* signal = nullptr;
+        Connection conn;
+        void disconnect() { if (signal && conn.isValid()) { signal->disconnect(conn); conn = Connection(); } }
+    };
+
+    std::unordered_map<std::string, std::unique_ptr<FloatEntry>> m_floats;
+    std::unordered_map<std::string, std::unique_ptr<ColorEntry>> m_colors;
+
+    void onFloatChanged(FloatEntry& entry, const f32& newVal, const f32& oldVal);
+    void onColorChanged(ColorEntry& entry, const Color& newVal, const Color& oldVal);
 };
 
 } // namespace gut
