@@ -1,5 +1,13 @@
 # Gut Toolkit Roadmap
 
+- [ ] Create GUIs from Luby, with hot-reloading.
+- [ ] Dirty rectangle optimization (split screen into regions, only re-render changed regions)
+- [ ] 3D billboard UI elements (nameplates above characters etc. could be created and styled via GUT)
+
+
+
+-- OLD STUFF BELOW --
+
 **Score: 82 done, 2 partial, 12 punted, 13 remaining** out of 109 features.
 
 ---
