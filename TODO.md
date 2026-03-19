@@ -48,9 +48,9 @@
 - [x] Transforms — per-element scaleX/scaleY/rotation/skewX/skewY (centre-origin), full affine matrix, inverse hit-test
 - [ ] Perspective transforms — 3×3 homogeneous matrix, quad mapping (trapezoid), per-vertex or per-pixel 1/w divide, projective inverse hit-test
 - [x] Backdrop blur / frosted glass
-- [p] Blend modes — multiply, screen, overlay, etc. (PUNT)
+- [ ] (PUNT) Blend modes — multiply, screen, overlay, etc. (PUNT)
 - [x] 9-slice / 9-patch image rendering — drawImageNineSlice, Image::Stretch::NineSlice, sliceBorders property
-- [p] Render-to-texture — offscreen render targets (PUNT)
+- [ ] (PUNT) Render-to-texture — offscreen render targets (PUNT)
 
 ## Text
 
@@ -61,8 +61,8 @@
 - [x] Text wrapping — word wrap via TextShaper::shapeMultiline in render path
 - [x] Text truncation / ellipsis — CharacterEllipsis + WordEllipsis, single-line
 - [~] Multiple font families — font registry with findFont(family, weight, style) best-match lookup; no system font enumeration (also, what about bundled fonts with the app?)
-- [p] Text selection (PUNT)
-- [p] Rich text / inline formatting — bold, italic, color spans within one block (PUNT)
+- [ ] (PUNT) Text selection (PUNT)
+- [ ] (PUNT) Rich text / inline formatting — bold, italic, color spans within one block (PUNT)
 - [x] Text shadow — textShadowColor/Offset/BlurRadius, hard + soft (multi-pass blur) shadows
 - [x] Text outline / stroke — textStrokeColor/Width, 8–16 direction multi-pass outline
 - [x] Text glow — textGlowColor/Radius, multi-ring radial spread with alpha falloff
@@ -80,8 +80,8 @@
 - [x] Mouse drag — DragDropManager, DragData payload, drop target interface, drag preview overlay
 - [x] Cursor styles — Element.cursor property, Context callback, NSCursor mapped on macOS
 - [x] Clipboard — Context callbacks (setOnGetClipboardText/setOnSetClipboardText), TextBox Ctrl+C/V/X
-- [p] IME input — CJK composition support (PUNT)
-- [p] Keyboard shortcuts / accelerators — global and scoped bindings (PUNT)
+- [ ] (PUNT) IME input — CJK composition support (PUNT)
+- [ ] (PUNT) Keyboard shortcuts / accelerators — global and scoped bindings (PUNT)
 
 ## Controls
 
@@ -99,14 +99,14 @@
 - [x] ContextMenu — right-click popup menu with items, separators, disabled items, hover highlight, overlay/captureMouse
 - [x] TabControl — scrollable tabs with < > arrow buttons when overflow, keyboard nav, hover highlight
 - [x] ListView / ItemsControl — virtualised scrollable list, item templates, Single/Multiple/Extended selection, keyboard nav, Ctrl+click/Shift+click, scrollbar
-- [p] TreeView (PUNT)
+- [ ] (PUNT) TreeView (PUNT)
 - [x] Dialog / Modal — modal overlay with backdrop, draggable title bar, close (X), configurable buttons (OK/Cancel/Yes/No), word-wrapping message, Escape/Enter keys
 - [x] Toast / Notification — auto-dismissing overlay, 6 positions (TopLeft/TopCenter/TopRight/BottomLeft/BottomCenter/BottomRight), stacking, fade-in/out, configurable duration, global Style
-- [p] Splitter / Resizable panels (PUNT)
+- [ ] (PUNT) Splitter / Resizable panels (PUNT)
 - [x] Toolbar — horizontal strip with icon buttons, toggles, separators; procedural Icon system (50 icons), hover/press/toggle states
 - [x] Menu bar — horizontal bar with dropdown menus, icons, shortcut labels, disabled items, keyboard nav (Left/Right/Up/Down/Enter/Esc), hover-to-switch
-- [p] Expander / Accordion (PUNT)
-- [p] Badge / Tag (PUNT)
+- [ ] (PUNT) Expander / Accordion (PUNT)
+- [ ] (PUNT) Badge / Tag (PUNT)
 
 ## Animation
 
@@ -129,18 +129,18 @@
 - [x] Z-index / stacking order
 - [x] Styles / theming — CSS selectors, stylesheets, Theme with defaultLight/defaultDark
 - [x] Visual tree walking — findByName, findByType, recursive
-- [p] Two-way data binding — only one-way currently (PUNT)
-- [p] Resource dictionary — no generic keyed resource store (PUNT)
-- [p] Command system — ICommand-style abstraction for actions (PUNT)
-- [p] Undo / redo (PUNT)
-- [p] Serialization — save/load UI tree from markup (PUNT)
-- [p] Debug overlay — layout inspector, render stats, FPS counter (PUNT)
-- [p] Accessibility — screen reader roles, labels, navigation (PUNT)
+- [ ] (PUNT) Two-way data binding — only one-way currently (PUNT)
+- [ ] (PUNT) Resource dictionary — no generic keyed resource store (PUNT)
+- [ ] (PUNT) Command system — ICommand-style abstraction for actions (PUNT)
+- [ ] (PUNT) Undo / redo (PUNT)
+- [ ] (PUNT) Serialization — save/load UI tree from markup (PUNT)
+- [ ] (PUNT) Debug overlay — layout inspector, render stats, FPS counter (PUNT)
+- [ ] (PUNT) Accessibility — screen reader roles, labels, navigation (PUNT)
 
 ## Platform / Backend
 
 - [x] macOS Metal backend
 - [x] Windows backend — D3D11 and D3D12
-- [p] Linux backend — Vulkan or OpenGL (PUNT)
-- [p] Web backend — WebGPU or Canvas (PUNT)
-- [p] Multiple windows (PUNT)
+- [ ] (PUNT) Linux backend — Vulkan or OpenGL (PUNT)
+- [ ] (PUNT) Web backend — WebGPU or Canvas (PUNT)
+- [ ] (PUNT) Multiple windows (PUNT)
