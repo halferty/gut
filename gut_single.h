@@ -2514,6 +2514,7 @@ public:
     Signal<Element*, Element*>& focusChanged() { return m_focusChanged; }
 
 private:
+    friend class Context;
     Element* findNextFocusable(Element* current, bool forward);
     Element* findFocusableInDirection(Element* current, FocusDirection direction);
     void collectFocusableElements(Element* root, std::vector<Element*>& result);
@@ -2638,6 +2639,7 @@ public:
     void setDoubleClickDistance(f32 distance) { m_doubleClickDistance = distance; }
 
 private:
+    friend class Context;
     friend class DragDropManager;
     void updateHoveredElement();
     MouseEvent createMouseEvent(MouseEventType type, MouseButton button = MouseButton::None);
@@ -4165,6 +4167,12 @@ public:
     
     GUT_PROPERTY(Visibility, visibility, Visibility::Visible)
     GUT_PROPERTY(f32, opacity, 1.0f)
+    
+    /// Font family name (empty = use default font).
+    /// Inherited by all widget subclasses. Set to override the default font
+    /// for this element and its text rendering.
+    GUT_PROPERTY(String, fontFamily, "")
+    
     GUT_PROPERTY(f32, scaleX, 1.0f)
     GUT_PROPERTY(f32, scaleY, 1.0f)
     GUT_PROPERTY(f32, rotation, 0.0f)
@@ -4400,6 +4408,15 @@ protected:
      * @brief Get corner radius for clipping. Override in Panel.
      */
     virtual f32 getClipCornerRadius() const { return 0.0f; }
+
+    /**
+     * @brief Resolve the font for this element.
+     *
+     * Checks the element's fontFamily() property first, falling back to
+     * the context's default font.  This should be used by all widget
+     * subclasses instead of calling context()->defaultFont() directly.
+     */
+    Font* resolveFont() const;
     
     /**
      * @brief Called when focus is gained.
@@ -5269,7 +5286,7 @@ public:
     // -------------------------------------------------------------------------
     
     GUT_PROPERTY(Color, foreground, Color::black())
-    GUT_PROPERTY(String, fontFamily, "sans-serif")
+    // fontFamily is inherited from Element base class
     GUT_PROPERTY(f32, fontSize, 14.0f)
     GUT_PROPERTY(FontWeight, fontWeight, FontWeight::Normal)
     GUT_PROPERTY(FontStyle, fontStyle, FontStyle::Normal)
@@ -5390,6 +5407,7 @@ public:
     GUT_PROPERTY(Color, focusBorderColor, Color::fromRgba8(100, 180, 255, 255))
     GUT_PROPERTY(f32, borderWidth, 1.0f)
     GUT_PROPERTY(f32, cornerRadius, 4.0f)
+    GUT_PROPERTY(f32, fontSize, 14.0f)
     
     // -------------------------------------------------------------------------
     // Callbacks
@@ -5401,6 +5419,7 @@ protected:
     Size2f measureOverride(Size2f availableSize) override;
     void onRender(RenderContext& ctx) override;
     bool onMouseEvent(const MouseEvent& event) override;
+    bool onKeyEvent(const KeyEvent& event) override;
     void onMouseEnter() override;
     void onMouseLeave() override;
 
@@ -18420,6 +18439,16 @@ void Element::onDragOver(DragDropEvent& /*event*/) {}
 void Element::onDragLeave() {}
 void Element::onDrop(DragDropEvent& /*event*/) {}
 
+Font* Element::resolveFont() const {
+    if (!context()) return nullptr;
+    if (!fontFamily().empty()) {
+        Font* f = context()->findFont(
+            std::string(fontFamily().begin(), fontFamily().end()));
+        if (f) return f;
+    }
+    return context()->defaultFont();
+}
+
 void Element::setParent(Element* parent) {
     m_parent = parent;
 }
@@ -20128,7 +20157,7 @@ Size2f Text::measureOverride(Size2f availableSize) {
     // Try to use the real font system
     if (context()) {
         Font* font = context()->findFont(fontFamily(), effectiveFontWeight(), effectiveFontStyle());
-        if (!font) font = context()->defaultFont();
+        if (!font) font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -20241,7 +20270,7 @@ static std::string truncateWithEllipsis(FontFace* face, const std::string& text,
 void Text::onRender(RenderContext& ctx) {
     if (context()) {
         Font* font = context()->findFont(fontFamily(), effectiveFontWeight(), effectiveFontStyle());
-        if (!font) font = context()->defaultFont();
+        if (!font) font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -20406,9 +20435,9 @@ Size2f Button::measureOverride(Size2f availableSize) {
         // Measure label text with font system if available
         bool measured = false;
         if (context()) {
-            Font* font = context()->defaultFont();
+            Font* font = resolveFont();
             if (font) {
-                auto face = font->getFace(14.0f);
+                auto face = font->getFace(fontSize());
                 if (face) {
                     contentSize.width = face->measureWidth(label());
                     contentSize.height = face->lineHeight();
@@ -20461,9 +20490,9 @@ void Button::onRender(RenderContext& ctx) {
     } else if (!label().empty()) {
         bool drawn = false;
         if (context()) {
-            Font* font = context()->defaultFont();
+            Font* font = resolveFont();
             if (font) {
-                auto face = font->getFace(14.0f);
+                auto face = font->getFace(fontSize());
                 if (face) {
                     f32 textW = face->measureWidth(label());
                     f32 textH = face->lineHeight();
@@ -20477,7 +20506,7 @@ void Button::onRender(RenderContext& ctx) {
         if (!drawn) {
             TextLayout layout;
             layout.text = label();
-            layout.fontSize = 14.0f;
+            layout.fontSize = fontSize();
             Size2f textSize = ctx.measureText(layout);
             Point2f textPos = {
                 (bounds().width - textSize.width) / 2,
@@ -20529,7 +20558,26 @@ bool Button::onMouseEvent(const MouseEvent& event) {
         default:
             break;
     }
-    
+
+    return false;
+}
+
+bool Button::onKeyEvent(const KeyEvent& event) {
+    if (!isEnabled()) {
+        return false;
+    }
+    // Activate a focused button via the keyboard (Enter or Space), matching the
+    // CheckBox/RadioButton/Toggle convention. Tab moves focus to the button;
+    // this fires its click. Focus-scoped, so it doesn't affect a focused TextBox
+    // (which handles Enter as submit itself).
+    if (event.type == KeyEventType::KeyDown &&
+        (event.key == Key::Return || event.key == Key::Space)) {
+        clicked().emit();
+        if (m_onClick) {
+            m_onClick();
+        }
+        return true;
+    }
     return false;
 }
 
@@ -20569,7 +20617,7 @@ Size2f CheckBox::measureOverride(Size2f availableSize) {
     f32 textH = boxSize();
     
     if (!label().empty() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -20620,7 +20668,7 @@ void CheckBox::onRender(RenderContext& ctx) {
     
     // Label
     if (!label().empty() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -20730,7 +20778,7 @@ Size2f RadioButton::measureOverride(Size2f availableSize) {
     f32 textH = circleSize();
     
     if (!label().empty() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -20773,7 +20821,7 @@ void RadioButton::onRender(RenderContext& ctx) {
     
     // Label
     if (!label().empty() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -20867,7 +20915,7 @@ Size2f Toggle::measureOverride(Size2f availableSize) {
     f32 textH = trackHeight();
 
     if (!label().empty() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -20949,7 +20997,7 @@ void Toggle::onRender(RenderContext& ctx) {
 
     // --- Label ---
     if (!label().empty() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -21120,7 +21168,7 @@ void Slider::onRender(RenderContext& ctx) {
 
     // --- Value label ---
     if (showValue() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -21262,7 +21310,7 @@ Size2f ProgressBar::measureOverride(Size2f /*availableSize*/) {
     f32 h = barHeight();
     // If showing label below, add space for text
     if (showLabel() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -21315,7 +21363,7 @@ void ProgressBar::onRender(RenderContext& ctx) {
 
     // --- Percentage text centred in bar ---
     if (showPercentInBar() && !indeterminate() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -21334,7 +21382,7 @@ void ProgressBar::onRender(RenderContext& ctx) {
 
     // --- Label below bar ---
     if (showLabel() && !showPercentInBar() && context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -21495,7 +21543,7 @@ Size2f DropDown::measureOverride(Size2f availableSize) {
     // Button height is itemHeight, width stretches to available or content
     f32 w = 0;
     if (context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -21534,7 +21582,7 @@ void DropDown::onRender(RenderContext& ctx) {
 
     // --- Selected text or placeholder ---
     if (context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -21602,7 +21650,7 @@ void DropDown::renderPopupOverlay(RenderContext& ctx) {
     ctx.pushClip(pr, cr);
 
     // Draw items
-    Font* font = context()->defaultFont();
+    Font* font = resolveFont();
     Ref<FontFace> face;
     if (font) face = font->getFace(fontSize());
 
@@ -21893,7 +21941,7 @@ void TabControl::selectTab(isize index) {
 f32 TabControl::tabHeaderWidth(const String& title) const {
     f32 w = tabPadding() * 2;
     if (context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(tabFontSize());
             if (face) {
@@ -22015,7 +22063,7 @@ void TabControl::onRender(RenderContext& ctx) {
     ctx.fillRect({0, 0, bw, barH}, tabBarBackground());
 
     // Tab headers
-    Font* font = context() ? context()->defaultFont() : nullptr;
+    Font* font = resolveFont();
     Ref<FontFace> face;
     if (font) face = font->getFace(tabFontSize());
 
@@ -22300,7 +22348,7 @@ void Table::onRender(RenderContext& ctx) {
     bool scroll = needsScrollbar();
     f32 contentW = scroll ? bw - kScrollbarWidth : bw;
 
-    Font* font = context() ? context()->defaultFont() : nullptr;
+    Font* font = resolveFont();
     Ref<FontFace> hdrFace, cellFace;
     if (font) {
         hdrFace = font->getFace(headerFontSize());
@@ -22765,7 +22813,7 @@ void ListView::onRender(RenderContext& ctx) {
     isize lastVisible  = static_cast<isize>((m_scrollOffset + bh) / ih);
     lastVisible = std::min(lastVisible, m_itemCount - 1);
 
-    Font* font = context() ? context()->defaultFont() : nullptr;
+    Font* font = resolveFont();
     Ref<FontFace> face;
     if (font) face = font->getFace(fontSize());
 
@@ -23257,7 +23305,7 @@ void Dialog::renderOverlay(RenderContext& ctx) {
         ctx.fillRect({0, tb.height - 1, tb.width, 1}, dialogBorderColor());
 
         // Title text
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(titleFontSize());
             if (face) {
@@ -23277,7 +23325,7 @@ void Dialog::renderOverlay(RenderContext& ctx) {
     // --- Body (message text) ---
     {
         Rectf br = bodyRect();
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font && !message().empty()) {
             auto face = font->getFace(messageFontSize());
             if (face) {
@@ -23333,7 +23381,7 @@ void Dialog::renderOverlay(RenderContext& ctx) {
     // --- Buttons ---
     {
         auto btns = buttonLayout();
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         Ref<FontFace> face;
         if (font) face = font->getFace(buttonFontSize());
 
@@ -23768,7 +23816,7 @@ void ContextMenu::renderPopupOverlay(RenderContext& ctx) {
     ctx.strokeRoundedRect({mx, my, mw, totalH}, cornerRadius(), menuBorderColor(), 1.0f);
 
     // Items
-    Font* font = context() ? context()->defaultFont() : nullptr;
+    Font* font = resolveFont();
     Ref<FontFace> face;
     if (font) face = font->getFace(fontSize());
 
@@ -24702,7 +24750,7 @@ void Toolbar::onRender(RenderContext& ctx) {
     // Bottom border
     ctx.fillRect({0, bounds().height - 1, bounds().width, 1}, borderColor());
 
-    Font* font = context() ? context()->defaultFont() : nullptr;
+    Font* font = resolveFont();
     Ref<FontFace> face;
     if (font) face = font->getFace(fontSize());
 
@@ -24964,7 +25012,7 @@ void MenuBar::onRender(RenderContext& ctx) {
     ctx.fillRect({0, barHeight() - 1, bounds().width, 1},
                  Color::fromRgba8(50, 50, 65, 200));
 
-    Font* font = context() ? context()->defaultFont() : nullptr;
+    Font* font = resolveFont();
     Ref<FontFace> face;
     if (font) face = font->getFace(barFontSize());
 
@@ -25029,7 +25077,7 @@ void MenuBar::renderDropdown(RenderContext& ctx) {
     ctx.strokeRoundedRect({mx, my, ddW, totalH}, menuCornerRadius(), menuBorderColor(), 1.0f);
 
     // Items
-    Font* font = context() ? context()->defaultFont() : nullptr;
+    Font* font = resolveFont();
     Ref<FontFace> face;
     if (font) face = font->getFace(menuFontSize());
 
@@ -25992,7 +26040,7 @@ i32 TextBox::hitTestCaret(f32 localX) const {
     // Use font system to measure character by character
     FontFace* face = nullptr;
     if (context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto faceRef = font->getFace(fontSize());
             face = faceRef.get();
@@ -26023,7 +26071,7 @@ f32 TextBox::measureSubstring(i32 pos) const {
     String sub = dt.substr(0, std::min(pos, static_cast<i32>(dt.size())));
 
     if (context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) {
@@ -26075,7 +26123,7 @@ Size2f TextBox::measureOverride(Size2f availableSize) {
     const auto& pad = padding();
     f32 textH = fontSize() * 1.2f;
     if (context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto face = font->getFace(fontSize());
             if (face) textH = face->lineHeight();
@@ -26122,7 +26170,7 @@ void TextBox::onRender(RenderContext& ctx) {
 
     FontFace* face = nullptr;
     if (context()) {
-        Font* font = context()->defaultFont();
+        Font* font = resolveFont();
         if (font) {
             auto faceRef = font->getFace(fontSize());
             face = faceRef.get();
@@ -26392,6 +26440,13 @@ Context::~Context() = default;
 
 void Context::setRoot(Ref<Element> root) {
     if (m_root) {
+        // Clear cached raw Element* pointers BEFORE destroying the old tree,
+        // otherwise InputManager/FocusManager hold dangling pointers that
+        // cause use-after-free crashes on the next mouse/key event.
+        m_inputManager->m_hoveredElement  = nullptr;
+        m_inputManager->m_capturedElement = nullptr;
+        m_inputManager->m_pressedElement  = nullptr;
+        m_focusManager->m_focusedElement  = nullptr;
         propagateContext(m_root.get());  // clear old
     }
     m_root = std::move(root);
